@@ -7,7 +7,7 @@
 const { app, BrowserWindow, session, desktopCapturer, ipcMain, Menu, nativeTheme, shell, powerMonitor, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const readline = require('readline');
 const http = require('http');
 const crypto = require('crypto');
@@ -343,9 +343,11 @@ function startKeys() {
   p.stdin.on('error', () => {});
   const rl = readline.createInterface({ input: p.stdout });
   rl.on('line', (line) => {
+    const pm = /^(procs|apps)(?: (.*))?$/.exec(line);
+    if (pm) { finishProcs(pm[1], pm[2] || ''); return; }
     const [cmd, num] = line.trim().split(/\s+/);
     const vk = Number(num) | 0;
-    if (cmd === 'ready') { keysOk = true; keysFails = 0; keysState = 'ok'; sendWatch(); return; }
+    if (cmd === 'ready') { keysOk = true; keysFails = 0; keysState = 'ok'; procsByKeys = true; sendWatch(); return; }
     if (cmd === 'captured') { finishCapture({ vk }); return; }
     if (cmd === 'down' || cmd === 'up') {
       for (const name of ['ptt', 'mute']) {
@@ -387,6 +389,47 @@ function finishCapture(result) {
   else if (result && result.vk === 0x08) result = { vk: 0 };
   w.resolve(result);
 }
+
+// ---------- запущенные программы: «Играет в …» ----------
+// Страница спрашивает раз в 20 с. Отвечает помощник (только имена программ и заголовки окон — в игры он
+// не заглядывает). Помощник старый или не запустился — встроенный в Windows tasklist, не чаще раза в 30 с.
+let procWait = null;     // { kind, resolve, timer }
+let procsByKeys = true;  // старый помощник не знает "procs"
+let procCache = null;    // { at, list, slow }
+function askKeys(kind) {
+  return new Promise((resolve) => {
+    if (!keys || !keysOk || !procsByKeys || procWait) { resolve(null); return; }
+    procWait = { kind, resolve, timer: setTimeout(() => { procWait = null; procsByKeys = false; resolve(null); }, 4000) };
+    tell(kind);
+  });
+}
+function finishProcs(kind, text) {
+  const w = procWait;
+  if (!w || w.kind !== kind) return;
+  procWait = null; clearTimeout(w.timer);
+  // "name" или "name=заголовок окна"
+  w.resolve(text ? text.split('|').map((x) => { const i = x.indexOf('='); return i < 0 ? { n: x } : { n: x.slice(0, i), t: x.slice(i + 1) }; }) : []);
+}
+function tasklistNames() {
+  return new Promise((resolve) => {
+    execFile('tasklist', ['/fo', 'csv', '/nh'], { windowsHide: true, timeout: 10000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
+      if (err) { resolve([]); return; }
+      const names = new Set();
+      for (const l of String(out).split(/\r?\n/)) { const m = /^"([^"]+)"/.exec(l); if (m) names.add(m[1].toLowerCase().replace(/\.exe$/, '')); }
+      resolve(Array.from(names, (n) => ({ n })));
+    });
+  });
+}
+ipcMain.handle('racia:procs', async () => {
+  if (process.platform !== 'win32') return [];
+  if (procCache && Date.now() - procCache.at < (procCache.slow ? 28000 : 8000)) return procCache.list;
+  let list = await askKeys('procs'), slow = false;
+  if (!list) { list = await tasklistNames(); slow = true; }
+  procCache = { at: Date.now(), list, slow };
+  return list;
+});
+// Программы с открытым окном — для «Добавить игру». null: помощника нет, имя впишут руками.
+ipcMain.handle('racia:apps', async () => (process.platform === 'win32' ? await askKeys('apps') : null));
 
 ipcMain.on('racia:set-hotkeys', (e, w) => {
   watch = { ptt: Number(w && w.ptt) | 0, mute: Number(w && w.mute) | 0 };

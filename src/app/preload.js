@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('racia', {
   flash: () => ipcRenderer.send('racia:flash'),
   notify: (n) => ipcRenderer.send('racia:notify', { tag: String((n && n.tag) || ''), title: String((n && n.title) || ''), body: String((n && n.body) || ''), icon: n && typeof n.icon === 'string' && n.icon.length < 300000 ? n.icon : '' }),
   closeNotify: (tag) => ipcRenderer.send('racia:notify-close', String(tag || '')),
+  processes: () => ipcRenderer.invoke('racia:procs'),
+  windows: () => ipcRenderer.invoke('racia:apps'),
   pendingLink: () => ipcRenderer.invoke('racia:pending-link'),
   onLink: (fn) => { ipcRenderer.on('racia:link', (e, l) => fn(String(l))); }
 });
