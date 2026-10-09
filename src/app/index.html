@@ -4485,7 +4485,8 @@ updateSettingsUI();
 requestAnimationFrame(tick);
 // ---------- bridge to the accounts part (social.js, program only) ----------
 window.RaciaCall = {
-  info: () => ({ inCall: st.inCall, peer: st.inCall ? st.myId : '', code: st.code, status: myStatus(), settingsStatus: settings.status }),
+  info: () => ({ inCall: st.inCall, peer: st.inCall ? st.myId : '', code: st.code, status: myStatus(), settingsStatus: settings.status,
+    count: st.inCall ? 1 + Array.from(members.values()).filter((m) => !m.cut).length : 0 }),
   join(code) {
     code = normCode(code);
     if (code.length < 3) return;
