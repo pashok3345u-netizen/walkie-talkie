@@ -1,7 +1,7 @@
 {
   "name": "racia",
   "productName": "Racia",
-  "version": "18.0.0",
+  "version": "19.0.0",
   "description": "Walkie-Talkie — голосовые звонки с друзьями",
   "main": "loader.js",
   "author": "ICEING"

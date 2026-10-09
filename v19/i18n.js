@@ -238,7 +238,11 @@
     'Звонок без ответа': 'Unanswered call', 'Пропущенный звонок': 'Missed call',
     'Позвонить ещё раз': 'Call again', 'Перезвонить': 'Call back', 'Звонок уже закончился': 'The call has already ended',
     'Не получилось позвонить. Если только что звонил — подожди 15 секунд.': 'Could not call. If you have just called, wait 15 seconds.',
-    'У друга старая версия Walkie-Talkie — отправляю приглашение в личку': 'Your friend has an old Walkie-Talkie — sending an invitation in DMs instead'
+    'У друга старая версия Walkie-Talkie — отправляю приглашение в личку': 'Your friend has an old Walkie-Talkie — sending an invitation in DMs instead',
+    // ---------- join a friend ----------
+    'В голосовом канале': 'In a voice channel', 'Вы в одном канале': 'You’re in the same channel', 'Зайти': 'Join',
+    'Голосовой канал': 'Voice channel', 'Друзья могут заходить ко мне без приглашения': 'Friends can join me without an invitation',
+    'Друзья видят, в каком ты канале, и заходят одной кнопкой. Выключишь — увидят только, что ты в канале и сколько там людей.': 'Friends see which channel you’re in and join with one button. Turn it off and they only see that you’re in a channel and how many people are there.'
   };
   const map = new Map(Object.entries(EN));
   const CYR = /[А-Яа-яЁё]/;

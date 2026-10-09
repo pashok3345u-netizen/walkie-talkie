@@ -62,6 +62,7 @@
     send: svg('<path d="M4 12l16-8-6 16-3-6z"/>', 20),
     phone: svg('<path d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>'),
     phoneDown: svg('<path transform="rotate(135 12 12)" d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>'),
+    voice: svg('<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>', 14),
     phoneMissed: svg('<path d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/><path d="M15 3l6 6M21 3l-6 6"/>'),
     google: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1 .7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6h-4a12 12 0 0 0 0 10.8z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>'
   };
@@ -120,6 +121,7 @@
     v2: false, v2Timer: 0, skew: 0, skewKnown: false,   // the database rules of version 18 are in; server clock − mine
     live: new Map(), liveKnown: new Set(), liveWatch: new Map(),   // friends' live/<uid> (what their app can do)
     callUnsub: null, out: null, ring: null,   // my outgoing call; the incoming one on screen
+    roomSent: '', roomAt: 0, roomTimer: 0,    // my channel as friends last got it (live/<me>.room)
     ringLog: new Map(), silenced: new Map(), missedAt: new Map()
   };
   const peerWatch = new Map(); // account uid -> Set(peer ids in my call)
@@ -170,7 +172,7 @@
     for (const u of S.liveWatch.values()) { try { u(); } catch (e) {} }
     S.liveWatch.clear(); S.live.clear(); S.liveKnown.clear();
     endOutgoing(); closeRing();
-    clearInterval(S.presTimer); clearTimeout(S.v2Timer);
+    clearInterval(S.presTimer); clearTimeout(S.v2Timer); clearTimeout(S.roomTimer); S.roomSent = '';
     S.started = false; S.isAdmin = false; S.v2 = false;
     S.friends.clear(); S.chats.clear(); S.blocked.clear(); S.profiles.clear(); S.presence.clear();
     S.chatWith = null; S.msgs = [];
@@ -304,7 +306,7 @@
     if (!at || Date.now() - at > 150000) return 'offline';
     return p.state;
   }
-  window.addEventListener('racia-call', () => writePresence());
+  window.addEventListener('racia-call', () => { writePresence(); syncRoom(); });
   window.addEventListener('racia-prefs', () => renderAll());
   window.addEventListener('beforeunload', () => writePresence(true));
 
@@ -592,7 +594,10 @@
     if (!S.v2) return;
     try {
       const t0 = Date.now();
-      await S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now() }, { merge: true });
+      // the channel goes right away too, so whatever a crash left behind is wiped
+      const room = roomNow();
+      await S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now(), room }, { mergeFields: ['v', 'at', 'room'] });
+      S.roomSent = JSON.stringify(room); S.roomAt = Date.now();
       const t1 = Date.now();
       const at = ms((await S.F.D.getDoc(d('live', myUid()))).get('at'));
       if (at) { S.skew = at - (t0 + t1) / 2; S.skewKnown = true; }
@@ -611,6 +616,55 @@
     const un = S.liveWatch.get(uid);
     if (un) { try { un(); } catch (e) {} }
     S.liveWatch.delete(uid); S.live.delete(uid); S.liveKnown.delete(uid);
+  }
+
+  // ---------- "join a friend": my channel in live/<me>.room, friends' channels in theirs ----------
+  // room = { n: people in the channel, code } — the code only if friends may come in without an invitation
+  // (a channel code works as its password; live/<uid> is readable by friends only).
+  const joinOpen = () => { try { return localStorage.getItem('racia-join-open') !== '0'; } catch (e) { return true; } };
+  function setJoinOpen(on) {
+    try { localStorage.setItem('racia-join-open', on ? '1' : '0'); } catch (e) {}
+    syncRoom(true);
+  }
+  function roomNow() {
+    const ci = Call.info();
+    if (!ci.inCall) return null;
+    const r = { n: Math.max(1, Math.min(99, ci.count | 0 || 1)) };
+    if (joinOpen() && /^[a-z0-9]{3,12}$/.test(ci.code)) r.code = ci.code;
+    return r;
+  }
+  // Joining, leaving and switching the setting go out at once; a changed head count at most every 10 s.
+  function syncRoom(now_) {
+    if (!S.v2 || !S.me) return;
+    const r = roomNow(), key = JSON.stringify(r);
+    if (key === S.roomSent) { clearTimeout(S.roomTimer); return; }
+    let prev = null; try { prev = JSON.parse(S.roomSent || 'null'); } catch (e) {}
+    const urgent = now_ || !r !== !prev || (r && prev && r.code !== prev.code);
+    clearTimeout(S.roomTimer);
+    S.roomTimer = setTimeout(() => {
+      const r2 = roomNow(), k2 = JSON.stringify(r2);
+      if (!S.v2 || k2 === S.roomSent) return;
+      S.roomSent = k2; S.roomAt = Date.now();
+      S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now(), room: r2 }, { mergeFields: ['v', 'at', 'room'] })
+        .catch(() => { if (S.roomSent === k2) S.roomSent = ''; });
+    }, urgent ? 0 : Math.max(0, S.roomAt + 10000 - Date.now()));
+  }
+  setInterval(() => syncRoom(), 5000);
+  // A friend's channel. Shown only while they're online: a crash leaves the last one behind.
+  function roomOf(uid) {
+    const r = (S.live.get(uid) || {}).room;
+    if (!r || typeof r.n !== 'number' || !isFriend(uid) || statusOf(uid) === 'offline') return null;
+    return { n: r.n, code: typeof r.code === 'string' && /^[a-z0-9]{3,12}$/.test(r.code) ? r.code : '' };
+  }
+  function voiceLine(uid) {
+    const r = roomOf(uid); if (!r) return null;
+    return h('span', { class: 'sx-voice' }, h('span', { class: 'ic', html: I.voice }), h('span', {}, 'В голосовом канале'), ' · ', h('span', {}, r.n + ' чел.'));
+  }
+  function joinBtn(uid) {
+    const r = roomOf(uid); if (!r || !r.code) return null;
+    const ci = Call.info();
+    if (ci.inCall && ci.code === r.code) return h('span', { class: 's sx-same' }, 'Вы в одном канале');
+    return button('Зайти', () => joinCode(r.code), 'btn-primary');
   }
 
   // ---------- calls: one document per pair of friends, calls/<pair> ----------
@@ -951,6 +1005,11 @@
     wrap.input = input;
     return wrap;
   }
+  function switchRow(title, sub, on, onChange) {
+    const b = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(!!on), 'aria-label': title });
+    b.addEventListener('click', () => { const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); onChange(v); });
+    return h('div', { class: 'set-row' }, h('div', { class: 'set-text' }, h('div', { class: 't' }, title), sub ? h('div', { class: 's' }, sub) : null), b);
+  }
   function button(text, onclick, cls, extra) { return h('button', Object.assign({ type: 'button', class: 'btn small ' + (cls || ''), onclick }, extra || {}), text); }
   let toastTimer = 0;
   function toast(text, onclick, raw) {
@@ -1120,12 +1179,12 @@
   }
 
   // ----- friends tab -----
-  function personRow(uid, actions, sub) {
+  function personRow(uid, actions, sub, extra) {
     const p = S.profiles.get(uid);
     return h('li', { class: 'sx-person' },
       h('button', { type: 'button', class: 'sx-person-main', onclick: () => openProfile(uid) },
         avatar(uid, 40, true),
-        h('span', { class: 'sx-person-t' }, h('b', { translate: 'no' }, p ? p.name : 'Загрузка…'), h('span', { class: 's' }, sub || ((p ? '@' + p.tag : '') + ' · ' + statusText(uid))))),
+        h('span', { class: 'sx-person-t' }, h('b', { translate: 'no' }, p ? p.name : 'Загрузка…'), h('span', { class: 's' }, sub || ((p ? '@' + p.tag : '') + ' · ' + statusText(uid))), extra || null)),
       h('span', { class: 'sx-person-a' }, actions));
   }
   function friendMenuBtn(uid) {
@@ -1148,7 +1207,8 @@
       else if (f.from === me) outgoing.push(f.other); else incoming.push(f.other);
     }
     const order = { online: 0, dnd: 1, idle: 2, offline: 3 };
-    friends.sort((a, b) => order[statusOf(a)] - order[statusOf(b)] || nameOf(a).localeCompare(nameOf(b)));
+    // friends in a voice channel first, then by status
+    friends.sort((a, b) => (roomOf(b) ? 1 : 0) - (roomOf(a) ? 1 : 0) || order[statusOf(a)] - order[statusOf(b)] || nameOf(a).localeCompare(nameOf(b)));
     const online = friends.filter((u) => statusOf(u) !== 'offline').length;
 
     const searchInput = h('input', { type: 'text', id: 'sxSearch', placeholder: 'Найти по тегу, например @vasya', autocomplete: 'off', spellcheck: 'false' });
@@ -1174,7 +1234,7 @@
       incoming.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Заявки в друзья · ' + incoming.length),
         h('ul', { class: 'sx-list' }, incoming.map((u) => personRow(u, [button('Принять', () => acceptFriend(u), 'btn-primary'), button('Отклонить', () => removeFriend(u))])))) : null,
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Друзья · ' + friends.length + (friends.length ? ' · в сети ' + online : '')),
-        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [callBtn(u), button('Написать', () => openChat(u)), friendMenuBtn(u)])))
+        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [joinBtn(u), callBtn(u), button('Написать', () => openChat(u)), friendMenuBtn(u)], null, voiceLine(u))))
           : h('p', { class: 's' }, 'Пока никого. Найди друга по тегу — тег виден у него в профиле.')),
       outgoing.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Ты отправил заявки'),
         h('ul', { class: 'sx-list' }, outgoing.map((u) => personRow(u, button('Отменить', () => removeFriend(u)))))) : null,
@@ -1381,6 +1441,10 @@
           [['ru', 'Русский'], ['en', 'English']].map(([v, t]) => h('button', { type: 'button', role: 'radio', 'data-v': v, 'aria-checked': String(Call.prefs().lang === v) }, t)))),
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Статус'), statusSeg,
         h('p', { class: 's' }, 'Через 10 минут без действий станешь «неактивен», а когда Walkie-Talkie закрыта — «не в сети».')),
+      S.v2 ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Голосовой канал'),
+        switchRow('Друзья могут заходить ко мне без приглашения',
+          'Друзья видят, в каком ты канале, и заходят одной кнопкой. Выключишь — увидят только, что ты в канале и сколько там людей.',
+          joinOpen(), setJoinOpen)) : null,
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Аккаунт'),
         h('p', { class: 's' }, 'Вход через Google: ' + (S.user.email || '')),
         h('div', { class: 'sx-acct-row' }, button('Скопировать мой тег', () => copyText('@' + S.me.tag, 'Тег скопирован')), button('Выйти из аккаунта', signOut))),
@@ -1401,7 +1465,9 @@
       else {
         if (!f) acts.push(button('Добавить в друзья', () => addFriend(uid).then(paint), 'btn-primary'));
         else if (f.status === 'accepted') {
-          acts.push(button('Написать', () => { card.hidden = true; openChat(uid); }, 'btn-primary'));
+          const jb = joinBtn(uid);
+          if (jb) acts.push(jb);
+          acts.push(button('Написать', () => { card.hidden = true; openChat(uid); }, jb && jb.tagName === 'BUTTON' ? '' : 'btn-primary'));
           if (canCall(uid)) acts.push(button('Позвонить', () => { card.hidden = true; startCall(uid); }, '', { disabled: !!S.out }));
         }
         else if (f.from === me) acts.push(h('span', { class: 's' }, 'Заявка отправлена'));
@@ -1413,6 +1479,7 @@
         h('div', { class: 'drawer-head' }, h('h2', {}, 'Профиль'), h('button', { type: 'button', class: 'icon-btn', html: I.close, 'aria-label': 'Закрыть', onclick: () => { card.hidden = true; } })),
         h('div', { class: 'sx-card-main' }, avatar(uid, 88, true),
           h('div', {}, h('div', { class: 'sx-card-name', translate: 'no' }, p ? p.name : 'Загрузка…'), h('div', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(uid)),
+            voiceLine(uid),
             p && p.mod && p.mod.banned ? h('div', { class: 'err' }, 'Заблокирован администратором') : null)),
         h('div', { class: 'sx-acct-row' }, acts)));
     };
@@ -1607,6 +1674,10 @@
 .sx-msg.new { animation: wt-rise .22s var(--ease); }
 .sx-chatrow, .sx-person { transition: background-color .14s var(--ease); }
 #sxCard, #sxSetup { z-index: 35; }
+.sx-voice { display: flex; align-items: center; gap: 5px; margin-top: 1px; font-size: .8rem; color: var(--ok); white-space: nowrap; overflow: hidden; }
+.sx-voice .ic { display: grid; flex: none; }
+.sx-voice > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.sx-same { white-space: nowrap; }
 .sx-callbtn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: transparent; color: var(--fg); transition: border-color .14s var(--ease), color .14s var(--ease), transform .1s var(--ease); }
 .sx-callbtn:hover:not(:disabled) { border-color: var(--ok); color: var(--ok); }
 .sx-callbtn:active:not(:disabled) { transform: scale(.94); }
