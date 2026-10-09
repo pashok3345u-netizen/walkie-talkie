@@ -76,7 +76,7 @@ const STATS = `(async () => {
 // The test copy must not be mistaken for the installed program.
 if (MANUAL) {
   app.on('browser-window-created', (e, w) => {
-    const title = 'Walkie-Talkie — ТЕСТОВАЯ КОПИЯ (' + path.basename(path.resolve(APPDIR, '..')) + ')';
+    const title = 'Walkie-Talkie — ТЕСТОВАЯ КОПИЯ';
     w.setTitle(title);
     w.on('page-title-updated', (ev) => { ev.preventDefault(); w.setTitle(title); });
   });

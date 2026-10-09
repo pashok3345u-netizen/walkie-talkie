@@ -140,6 +140,9 @@ https://github.com/electron/electron/releases/tag/v44.7.0 во временну�
    `update.json` и пересобирает `Walkie-Talkie.zip` из **всего** содержимого `src/`.
    Значит, в `src/` не должно лежать ничего лишнего (собранный RaciaKeys.exe, тестовые файлы).
    release.ps1 проверен на версии 15: update.json и файлы v15 совпали с release.py байт в байт.
+   Архив от release.ps1 помечен как сделанный в Windows (made-by host 0), имена — UTF-8 с флагом.
+   Проводник («Извлечь всё»), 7-Zip и WinRAR показывают `Прочитай.txt` правильно; `unzip` из Git Bash
+   портит это имя — проверять архив проводником (Shell.Application → CopyHere), а не unzip.
 3. Проверить, что SHA-256 в update.json совпадают с файлами в `v<N>/`, закоммитить,
    **спросить владельца** и только потом `git push`.
 

@@ -1838,6 +1838,45 @@ const HiFiPC = BaseRTC && class extends BaseRTC {
   createOffer(...a) { preferGpuCodec(this); return super.createOffer(...a); }
 };
 
+// TURN server: when two friends' networks don't let them connect directly (mobile internet, strict
+// NAT), the call goes through it instead. A direct connection is still tried first and wins whenever
+// it works. The address and login live in ice.json in the GitHub repo, so a new password or another
+// service needs no new version; the last good copy is kept, and the list below is the fallback.
+// "turn": [] in ice.json turns the server off.
+const ICE_URLS = [
+  'https://raw.githubusercontent.com/pashok3345u-netizen/walkie-talkie/main/ice.json',
+  'https://cdn.jsdelivr.net/gh/pashok3345u-netizen/walkie-talkie@main/ice.json'
+];
+const ICE_BUILTIN = [{
+  urls: ['turn:free.expressturn.com:3478?transport=udp', 'turn:free.expressturn.com:3478?transport=tcp'],
+  username: '000000002106905574', credential: 'nVMvyEO5uMdIjOWce30glDM6JuU='
+}];
+function cleanIce(list) {
+  if (!Array.isArray(list)) return null;
+  const out = [];
+  for (const s of list.slice(0, 4)) {
+    if (!s || typeof s !== 'object' || typeof s.username !== 'string' || typeof s.credential !== 'string') continue;
+    const urls = (Array.isArray(s.urls) ? s.urls : [s.urls])
+      .filter((u) => typeof u === 'string' && /^turns?:[A-Za-z0-9.-]+(:\d{1,5})?(\?transport=(udp|tcp))?$/.test(u)).slice(0, 4);
+    if (urls.length) out.push({ urls, username: s.username.slice(0, 256), credential: s.credential.slice(0, 256) });
+  }
+  return out;
+}
+let iceServers = cleanIce(loadJson('racia-ice').turn) || ICE_BUILTIN;
+const icePromise = (async () => {
+  for (const u of ICE_URLS) {
+    try {
+      const r = await fetch(u + '?t=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const list = cleanIce((await r.json()).turn);
+      if (!list) continue;
+      iceServers = list;
+      save('racia-ice', JSON.stringify({ turn: list }));
+      return;
+    } catch (e) {}
+  }
+})();
+
 // ---------- joining ----------
 async function onJoin(e) {
   e.preventDefault();
@@ -1857,6 +1896,8 @@ async function onJoin(e) {
   catch (err) { try { st.ctx = new AC(); } catch (e2) { st.ctx = null; } }
 
   st.lib = await libPromise;
+  // The fresh TURN login is usually here long before the click; don't hold the join for it.
+  await Promise.race([icePromise, new Promise((r) => setTimeout(r, 3000))]);
   if (!st.lib || typeof st.lib.joinRoom !== 'function') {
     setBusy(false); stopAudio();
     showErr(APP ? 'Не загрузилась библиотека для звонков. Проверь интернет и перезапусти Walkie-Talkie (или нажми Ctrl+R).'
@@ -1883,6 +1924,7 @@ async function onJoin(e) {
   }
   setupPipeline();
   st.muted = false; st.testing = false; st.pttHeld = false;
+  st.turnOn = iceServers.length > 0;
 
   try {
     st.room = st.lib.joinRoom(
@@ -1890,6 +1932,9 @@ async function onJoin(e) {
         appId: APP_ID,
         password: 'racia:' + code,
         rtcPolyfill: HiFiPC || undefined,
+        turnConfig: iceServers,
+        // Hidden test switch: localStorage racia-relay-only = 1 → connect only through the TURN server.
+        rtcConfig: load('racia-relay-only') === '1' ? { iceTransportPolicy: 'relay' } : undefined,
         relayConfig: Array.isArray(st.lib.defaultRelayUrls)
           ? { urls: st.lib.defaultRelayUrls, warnOnRelayFailure: false }
           : { redundancy: 28, warnOnRelayFailure: false }
@@ -1901,7 +1946,9 @@ async function onJoin(e) {
           const msg = String((d && d.error) || '');
           st.joinErr = /password|decrypt/i.test(msg)
             ? 'Кто-то зашёл с этим кодом, но с другой версией страницы. Пусть скачает файл заново.'
-            : 'Друг нашёлся, но соединиться напрямую не получилось: ваши сети не пускают звонок. Попробуйте оба включить VPN или раздать интернет с телефона и зайти заново.';
+            : st.turnOn
+              ? 'Друг нашёлся, но соединиться не получилось ни напрямую, ни через сервер. Попробуйте оба включить VPN или раздать интернет с телефона и зайти заново.'
+              : 'Друг нашёлся, но соединиться напрямую не получилось: ваши сети не пускают звонок. Попробуйте оба включить VPN или раздать интернет с телефона и зайти заново.';
           updateStatus();
         }
       }
@@ -3266,18 +3313,24 @@ async function netTick() {
       if (!m || m.cut || !pc || typeof pc.getStats !== 'function') continue;
       let rep;
       try { rep = await pc.getStats(); } catch (e) { continue; }
-      let pairId = null, rtt = null, inA = null, outA = null, pSent = 0, pLost = 0;
+      let pairId = null, rtt = null, relay = null, inA = null, outA = null, pSent = 0, pLost = 0;
       const sources = new Map();
+      const cands = new Map(); // candidate id -> host | srflx | prflx | relay ("relay" = through a TURN server)
       rep.forEach((r) => {
         if (r.type === 'transport' && r.selectedCandidatePairId) pairId = r.selectedCandidatePairId;
         if (r.type === 'media-source') sources.set(r.id, r.trackIdentifier);
+        if (r.type === 'local-candidate' || r.type === 'remote-candidate') cands.set(r.id, r.candidateType);
         // What I send to this friend: packets out, and how many of them the friend reports lost.
         if (r.type === 'outbound-rtp') pSent += r.packetsSent || 0;
         if (r.type === 'remote-inbound-rtp') pLost += Math.max(0, r.packetsLost || 0);
       });
       rep.forEach((r) => {
-        if (r.type === 'candidate-pair' && typeof r.currentRoundTripTime === 'number' &&
-            (pairId ? r.id === pairId : (r.nominated && r.state === 'succeeded'))) rtt = r.currentRoundTripTime * 1000;
+        if (r.type === 'candidate-pair' && (pairId ? r.id === pairId : (r.nominated && r.state === 'succeeded'))) {
+          if (typeof r.currentRoundTripTime === 'number') rtt = r.currentRoundTripTime * 1000;
+          // Either side's TURN server counts: the sound goes through a server, not straight between us.
+          const lt = cands.get(r.localCandidateId), rt = cands.get(r.remoteCandidateId);
+          if (lt || rt) relay = lt === 'relay' || rt === 'relay';
+        }
         if (r.type === 'inbound-rtp' && r.kind === 'audio' && (!inA || (r.packetsReceived || 0) > (inA.packetsReceived || 0))) inA = r;
         if (r.type === 'outbound-rtp' && r.kind === 'audio') {
           const tid = sources.get(r.mediaSourceId);
@@ -3286,6 +3339,7 @@ async function netTick() {
       });
       const n = st.net.get(id) || { hist: [], rtt: null, loss: 0, jitter: 0, kbps: 0, outLoss: 0, vf: 1 };
       n.rtt = rtt;
+      n.relay = relay;
       n.hist.push(rtt); if (n.hist.length > 60) n.hist.shift();
       if (inA) {
         const lost = inA.packetsLost || 0, got = inA.packetsReceived || 0;
@@ -3358,6 +3412,7 @@ function renderNet() {
     li.querySelector('b').textContent = nameOf(id);
     const ol = n.outLoss || 0;
     li.querySelector('span').textContent = (typeof n.rtt === 'number' ? Math.round(n.rtt) + ' мс' : '—') +
+      (n.relay === true ? ' · через сервер' : n.relay === false ? ' · напрямую' : '') +
       ' · потери ' + n.loss.toFixed(n.loss < 10 ? 1 : 0) + '% · джиттер ' + Math.round(n.jitter) + ' мс' +
       ' · исходящие потери ' + ol.toFixed(ol < 10 ? 1 : 0) + '%' +
       (n.vf && n.vf < 0.99 ? ' · видео −' + Math.round((1 - n.vf) * 100) + '%' : '');
