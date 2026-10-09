@@ -257,7 +257,22 @@
     'Ищу открытые окна…': 'Looking for open windows…',
     'Запусти игру и выбери её окно — или впиши имя файла сам.': 'Start the game and pick its window — or type the file name yourself.',
     'Впиши имя файла игры — его видно в Диспетчере задач, вкладка «Подробности».': 'Type the game’s file name — Task Manager shows it on the “Details” tab.',
-    'Нужны и файл игры, и название': 'Both the game file and a name are needed', 'Игра добавлена': 'Game added'
+    'Нужны и файл игры, и название': 'Both the game file and a name are needed', 'Игра добавлена': 'Game added',
+    // ---------- profile look, badges ----------
+    'Создатель': 'Creator', 'Админ': 'Admin', 'Первые 10': 'First 10', 'Тестировщик': 'Tester', 'Нашёл баг': 'Bug hunter', 'Поддержал проект': 'Supporter',
+    'Красный': 'Red', 'Оранжевый': 'Orange', 'Золотой': 'Gold', 'Лаймовый': 'Lime', 'Зелёный': 'Green', 'Бирюзовый': 'Teal',
+    'Голубой': 'Sky blue', 'Синий': 'Blue', 'Фиолетовый': 'Violet', 'Розовый': 'Pink', 'Без цвета': 'No colour',
+    'Цвет ника': 'Name colour', 'О себе': 'About me', 'Оформление профиля': 'Profile look',
+    'Так тебя видят в карточке профиля. Цвет ника — во всех списках и в звонке.': 'This is how your profile card looks. The name colour shows in every list and in calls.',
+    'Выбрать баннер': 'Choose a banner', 'Сменить баннер': 'Change banner', 'Убрать баннер': 'Remove banner',
+    'Пара слов о себе: во что играешь, когда на связи…': 'A few words about you: what you play, when you’re around…',
+    'Сохранить оформление': 'Save the look', 'Оформление сохранено': 'Look saved',
+    'Значки': 'Badges', 'Карточка профиля': 'Profile card',
+    'Выдают только владельцы проекта (почта в правилах базы)': 'Only the project owners give this one (e-mail in the database rules)',
+    'Себе значки выдавать нельзя': 'You can’t give badges to yourself',
+    'Если баннер или «о себе» неприличные — их можно убрать. Человек сможет поставить новые.': 'If the banner or “about me” is offensive, you can remove them. The person can set new ones.',
+    'Убрать баннер и «о себе»': 'Remove banner and “about me”', 'Да, убрать': 'Yes, remove',
+    'Значок выдан': 'Badge given', 'Значок снят': 'Badge removed', 'Баннер и «о себе» убраны': 'Banner and “about me” removed'
   };
   const map = new Map(Object.entries(EN));
   const CYR = /[А-Яа-яЁё]/;
@@ -308,6 +323,7 @@
     [/^Переслано от (.+)$/, (m) => 'Forwarded from ' + m[1]],
     [/^Переслано: (.+)$/, (m) => 'Forwarded to ' + m[1]],
     [/^Зайти в канал (.+)$/, (m) => 'Join channel ' + m[1]],
+    [/^В Walkie-Talkie с (.+)$/, (m) => 'On Walkie-Talkie since ' + m[1]],
     [/^(\d+) мин$/, (m) => m[1] + ' min'],
     [/^(\d+) ч$/, (m) => m[1] + ' h'],
     [/^(\d+) ч (\d+) мин$/, (m) => m[1] + ' h ' + m[2] + ' min'],

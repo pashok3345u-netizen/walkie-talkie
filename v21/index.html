@@ -68,6 +68,9 @@
   --g2: #7DD3FC;
   --g3: #F0ABFC;
   --g4: #CDF300;
+  /* name colours (users.color 1–10): contrast ≥ 7 on every background of the theme */
+  --nc-1: #F08989; --nc-2: #F38C46; --nc-3: #D39E0B; --nc-4: #7AB720; --nc-5: #2CBE5D;
+  --nc-6: #1EBAAA; --nc-7: #3BB1EC; --nc-8: #8AA3F3; --nc-9: #BF92F2; --nc-10: #EF81C7;
   color-scheme: dark;
 }
 /* Hologram — light, pastel metal */
@@ -107,6 +110,9 @@
   --g2: #2779B8;
   --g3: #B0379A;
   --g4: #13734A;
+  /* name colours: contrast ≥ 4.8 on every background of the theme */
+  --nc-1: #C51818; --nc-2: #A4480A; --nc-3: #7E5E07; --nc-4: #496D13; --nc-5: #1B7238;
+  --nc-6: #126F66; --nc-7: #0F6997; --nc-8: #2653EA; --nc-9: #842FE5; --nc-10: #BA177F;
   color-scheme: light;
 }
 /* Solar Flare — dark and hot: amber, orange, pink */
@@ -146,6 +152,9 @@
   --g2: #FFD166;
   --g3: #FF2E92;
   --g4: #CDF300;
+  /* name colours: contrast ≥ 7 on every background of the theme */
+  --nc-1: #F08787; --nc-2: #F38942; --nc-3: #D19C0B; --nc-4: #7AB620; --nc-5: #2CBD5C;
+  --nc-6: #1EB8A8; --nc-7: #35AFEB; --nc-8: #89A2F3; --nc-9: #BE91F1; --nc-10: #EF7EC6;
   color-scheme: dark;
 }
 :root {
@@ -1016,6 +1025,10 @@ option { background: var(--panel); color: var(--fg); }
 .cm-c { min-width: 0; }
 .cm-h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .cm-h b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-h b.link, .cm-av.link, .member .avatar.link { cursor: pointer; }
+.cm-h b.link:hover { text-decoration: underline; }
+.bdgs { flex: none; font-size: .78rem; letter-spacing: 1px; }
+.bdgs:empty { display: none; }
 .cm-h .s { flex: none; font-size: .7rem; color: var(--muted); }
 .cm-t { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; line-height: 1.42; }
 .cm-t.deleted { color: var(--muted); font-style: italic; font-size: .84rem; }
@@ -3352,13 +3365,27 @@ function paintActOf(id, li) {
   else { const m = members.get(id); if (m) paintActivity(el, m.note, m.game); }
 }
 
+// ---------- name colour and badges (from the account, version 21+) ----------
+// users.color 1–10 → --nc-N (a shade per theme); badges are given by the app's administrators.
+const BADGE_ICON = { creator: ['👑', 'Создатель'], admin: ['🛡️', 'Админ'], first10: ['🥇', 'Первые 10'], tester: ['🧪', 'Тестировщик'], bug: ['🐞', 'Нашёл баг'], support: ['💜', 'Поддержал проект'] };
+function nameColor(acc) { const c = acc ? acc.color | 0 : 0; return c >= 1 && c <= 10 ? 'var(--nc-' + c + ')' : ''; }
+function paintBadges(el, acc) {
+  if (!el) return;
+  const list = acc && Array.isArray(acc.badges) ? acc.badges.filter((b) => BADGE_ICON[b]) : [];
+  const key = list.join(',');
+  if (el.dataset.k === key) return;
+  el.dataset.k = key;
+  el.textContent = '';
+  for (const b of list) { const s = document.createElement('span'); s.textContent = BADGE_ICON[b][0]; s.title = BADGE_ICON[b][1]; el.append(s); }
+}
+
 // ---------- people list ----------
 function mkTile(id, me) {
   const li = document.createElement('li');
   li.className = 'member' + (me ? ' me' : '');
   li.innerHTML =
     '<div class="avatar" aria-hidden="true"><span class="ini" translate="no"></span><img class="av" alt="" hidden><span class="dot"></span></div>' +
-    '<div class="info"><div class="nm"><span class="n" translate="no"></span>' + (me ? '<span class="tag">ты</span>' : '') + '<span class="tag own" hidden>владелец</span>' + (me ? '<span class="live" hidden>В эфире</span>' : '<button type="button" class="live" hidden></button><span class="ping"></span>') + '</div><div class="sub"></div><div class="act" hidden></div></div>' +
+    '<div class="info"><div class="nm"><span class="n" translate="no"></span><span class="bdgs"></span>' + (me ? '<span class="tag">ты</span>' : '') + '<span class="tag own" hidden>владелец</span>' + (me ? '<span class="live" hidden>В эфире</span>' : '<button type="button" class="live" hidden></button><span class="ping"></span>') + '</div><div class="sub"></div><div class="act" hidden></div></div>' +
     '<div class="mact"><span class="micoff" title="Микрофон выключен">' + MICOFF + '</span>' + (me ? '' : '<button type="button" class="mbtn" hidden aria-label="Управление">' + DOTS + '</button>') + '</div>' +
     (me ? '' : '<label class="vol"><span class="sr">Громкость голоса</span>' + VOLICON + '<input type="range" min="0" max="100" step="1"></label>');
   if (!me) {
@@ -3369,7 +3396,9 @@ function mkTile(id, me) {
     const mb = li.querySelector('.mbtn');
     mb.addEventListener('click', () => openMemberMenu(mb, id));
     const nEl = li.querySelector('.n');
-    nEl.addEventListener('click', () => { if (nEl.dataset.acc && window.RaciaSocial) window.RaciaSocial.openProfile(nEl.dataset.acc); });
+    const card = () => { if (nEl.dataset.acc && window.RaciaSocial) window.RaciaSocial.openProfile(nEl.dataset.acc); };
+    nEl.addEventListener('click', card);
+    li.querySelector('.avatar').addEventListener('click', card);
     li.querySelector('button.live').addEventListener('click', () => {
       if (st.watching.has(id)) { const v = vids.get(id + ':screen'); if (v) v.fig.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
       else startWatching(id);
@@ -3406,6 +3435,9 @@ function render() {
     nEl.title = acc ? '@' + acc.tag + (m.me ? '' : ' — нажми, чтобы открыть профиль') : '';
     nEl.classList.toggle('link', !!acc && !m.me);
     nEl.dataset.acc = acc && !m.me ? acc.uid : '';
+    nEl.style.color = nameColor(acc);
+    li.querySelector('.avatar').classList.toggle('link', !!acc && !m.me);
+    paintBadges(li.querySelector('.bdgs'), acc);
     li.querySelector('.ini').textContent = shown.charAt(0).toUpperCase();
     const av = li.querySelector('.av');
     if (acc && acc.avatar) { if (av.getAttribute('src') !== acc.avatar) av.src = acc.avatar; av.hidden = false; } else av.hidden = true;
@@ -3832,11 +3864,15 @@ function chatRich(text, names) {
   if (last < text.length) out.push(text.slice(last));
   return out;
 }
-function chatAvatar(m) {
-  let acc = null;
-  if (m.au === MY_UID) acc = st.acc;
-  else for (const x of members.values()) if (x.uid === m.au && x.account && x.account.verified) { acc = x.account; break; }
-  return hel('span', { class: 'cm-av', 'aria-hidden': 'true' },
+// The author's confirmed account, if they're in the channel now (for the avatar, name colour, profile card).
+function chatAcc(m) {
+  if (m.au === MY_UID) return st.acc;
+  for (const x of members.values()) if (x.uid === m.au && x.account && x.account.verified) return x.account;
+  return null;
+}
+function openAccCard(acc) { if (acc && acc.uid && window.RaciaSocial) window.RaciaSocial.openProfile(acc.uid); }
+function chatAvatar(m, acc) {
+  return hel('span', { class: 'cm-av' + (acc ? ' link' : ''), 'aria-hidden': 'true', onclick: acc ? () => openAccCard(acc) : null },
     acc && acc.avatar ? hel('img', { src: acc.avatar, alt: '' }) : hel('span', { translate: 'no', text: (m.name || '?').charAt(0).toUpperCase() }));
 }
 function chatImgEl(img) {
@@ -3865,9 +3901,11 @@ function chatBar(m) {
 }
 function chatMsgEl(m, grouped, names) {
   const el = hel('div', { class: 'cm-msg' + (grouped ? ' grouped' : '') + (m.ment && !m.del ? ' ment' : ''), 'data-id': m.id });
-  el.append(grouped ? hel('span', { class: 'cm-side-time', text: chatFmt('t').format(m.at) }) : chatAvatar(m));
+  const acc = grouped ? null : chatAcc(m);
+  el.append(grouped ? hel('span', { class: 'cm-side-time', text: chatFmt('t').format(m.at) }) : chatAvatar(m, acc));
   const c = hel('div', { class: 'cm-c' });
-  if (!grouped) c.append(hel('div', { class: 'cm-h' }, hel('b', { translate: 'no', text: m.name }),
+  if (!grouped) c.append(hel('div', { class: 'cm-h' },
+    hel('b', { translate: 'no', text: m.name, class: acc ? 'link' : null, style: nameColor(acc) ? 'color:' + nameColor(acc) : null, onclick: acc ? () => openAccCard(acc) : null }),
     hel('span', { class: 's', title: chatFmt('f').format(m.at), text: m.sending ? 'отправляется…' : chatFmt('t').format(m.at) })));
   if (m.del) c.append(hel('div', { class: 'cm-t deleted', text: 'Сообщение удалено' }));
   else {
@@ -4604,7 +4642,8 @@ window.RaciaCall = {
     $('#joinView').requestSubmit();
   },
   setAccount(acc) {
-    st.acc = acc ? { uid: acc.uid, name: cleanName(acc.name), tag: acc.tag, avatar: /^data:image\/(webp|jpeg|png);base64,/.test(acc.avatar || '') ? acc.avatar : '', mod: acc.mod || {} } : null;
+    st.acc = acc ? { uid: acc.uid, name: cleanName(acc.name), tag: acc.tag, avatar: /^data:image\/(webp|jpeg|png);base64,/.test(acc.avatar || '') ? acc.avatar : '', mod: acc.mod || {},
+      color: acc.color | 0, badges: Array.isArray(acc.badges) ? acc.badges.filter((b) => BADGE_ICON[b]) : [] } : null;
     const nameEl = $('#name');
     if (st.acc) { nameEl.value = st.acc.name; nameEl.disabled = true; nameEl.title = 'Имя берётся из профиля'; }
     else { nameEl.disabled = false; nameEl.title = ''; }

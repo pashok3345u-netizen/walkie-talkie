@@ -19,6 +19,11 @@
   const REACTIONS = [['like', '👍'], ['love', '❤️'], ['lol', '😂'], ['wow', '😮'], ['sad', '😢'], ['fire', '🔥']];
   const STATUS_TEXT = { online: 'в сети', idle: 'неактивен', dnd: 'не беспокоить', offline: 'не в сети' };
   const TAG_RE = /^[a-z0-9_]{3,20}$/;
+  // Badges are given by the administrators (the database lets only the e-mails in the rules give
+  // "Создатель" and "Админ"); the same ids are listed in the rules. Name colours 1–10 → --nc-N in index.html.
+  const BADGES = [['creator', '👑', 'Создатель'], ['admin', '🛡️', 'Админ'], ['first10', '🥇', 'Первые 10'],
+    ['tester', '🧪', 'Тестировщик'], ['bug', '🐞', 'Нашёл баг'], ['support', '💜', 'Поддержал проект']];
+  const COLORS = ['Красный', 'Оранжевый', 'Золотой', 'Лаймовый', 'Зелёный', 'Бирюзовый', 'Голубой', 'Синий', 'Фиолетовый', 'Розовый'];
   // What this version can do, for friends' apps (live/<uid>.v): 18 — calls.
   const LIVE_V = 18;
   const RING_MS = 30000;
@@ -30,6 +35,7 @@
       return t && typeof t.uid === 'string' && /^(127\.0\.0\.1|localhost|[a-z0-9-]+\.localhost):\d+$/.test(t.emu) ? t : null;
     } catch (e) { return null; }
   })();
+  const testEmail = () => (TEST && typeof TEST.email === 'string' && /^[^@\s]+@[^@\s]+$/.test(TEST.email) ? TEST.email : (TEST ? TEST.uid + '@test.local' : ''));
 
   // ---------- small helpers ----------
   const $ = (s, r) => (r || document).querySelector(s);
@@ -135,7 +141,7 @@
     S.F = { auth: A.getAuth(app), db: D.getFirestore(app), A, D };
     if (TEST) {
       const [host, port] = TEST.emu.split(':');
-      D.connectFirestoreEmulator(S.F.db, host, +port, { mockUserToken: { sub: TEST.uid, user_id: TEST.uid, email: TEST.uid + '@test.local', email_verified: true } });
+      D.connectFirestoreEmulator(S.F.db, host, +port, { mockUserToken: { sub: TEST.uid, user_id: TEST.uid, email: testEmail(), email_verified: true } });
     }
     return S.F;
   }
@@ -319,7 +325,8 @@
     const prof = S.profiles.get(uid), p = S.presence.get(uid);
     for (const peerId of set) {
       const verified = !!prof && !!p && p.peer === peerId && Date.now() - ms(p.at) < 180000;
-      Call.peerAccount(peerId, { uid, verified, name: prof ? prof.name : '', tag: prof ? prof.tag : '', avatar: prof ? safeAv(prof.avatar) : '', mod: prof ? prof.mod || {} : {} });
+      Call.peerAccount(peerId, { uid, verified, name: prof ? prof.name : '', tag: prof ? prof.tag : '', avatar: prof ? safeAv(prof.avatar) : '', mod: prof ? prof.mod || {} : {},
+        color: colorOf(prof), badges: badgeIds(prof) });
     }
   }
 
@@ -1022,6 +1029,16 @@
 
   // ---------- rendering helpers ----------
   function nameOf(uid) { const p = S.profiles.get(uid); return p ? p.name : 'Без имени'; }
+  const colorOf = (p) => (p && Number.isInteger(p.color) && p.color >= 1 && p.color <= COLORS.length ? p.color : 0);
+  const badgeIds = (p) => (p && Array.isArray(p.badges) ? BADGES.map(([id]) => id).filter((id) => p.badges.includes(id)) : []);
+  // a name in its own colour, with the small badge icons after it
+  function nameEl(uid, fallback, cls) {
+    const p = S.profiles.get(uid), c = colorOf(p);
+    const bs = BADGES.filter(([id]) => badgeIds(p).includes(id));
+    return h('span', { class: 'sx-nm' + (cls ? ' ' + cls : '') },
+      h('b', { translate: 'no', style: c ? 'color:var(--nc-' + c + ')' : null }, p ? p.name : (fallback || 'Без имени')),
+      bs.length ? h('span', { class: 'sx-bdg' }, bs.map(([, e, t]) => h('span', { title: t }, e))) : null);
+  }
   function statusText(uid) { return S.blocked.has(uid) ? 'заблокирован' : STATUS_TEXT[statusOf(uid)]; }
   const safeAv = (u) => (typeof u === 'string' && /^data:image\/(webp|jpeg|png);base64,/.test(u) ? u : '');
   function avatar(uid, size, withDot) {
@@ -1157,7 +1174,7 @@
       content = [
         h('div', { class: 'sx-me' },
           avatar(myUid(), 44, true),
-          h('div', { class: 'sx-me-t' }, h('b', { translate: 'no' }, S.me.name), h('span', { class: 's' }, '@' + S.me.tag)),
+          h('div', { class: 'sx-me-t' }, nameEl(myUid()), h('span', { class: 's' }, '@' + S.me.tag)),
           button('Профиль', () => { S.tab = 'profile'; show(true); })),
         mod.banned ? h('p', { class: 'err' }, 'Твой аккаунт заблокирован администратором' + (mod.reason ? ': ' + mod.reason : '') + '.') : null,
         h('div', { class: 'sx-acct-row' },
@@ -1230,7 +1247,7 @@
     return h('li', { class: 'sx-person' },
       h('button', { type: 'button', class: 'sx-person-main', onclick: () => openProfile(uid) },
         avatar(uid, 40, true),
-        h('span', { class: 'sx-person-t' }, h('b', { translate: 'no' }, p ? p.name : 'Загрузка…'), h('span', { class: 's' }, sub || ((p ? '@' + p.tag : '') + ' · ' + statusText(uid))), extra || null)),
+        h('span', { class: 'sx-person-t' }, nameEl(uid, 'Загрузка…'), h('span', { class: 's' }, sub || ((p ? '@' + p.tag : '') + ' · ' + statusText(uid))), extra || null)),
       h('span', { class: 'sx-person-a' }, actions));
   }
   function friendMenuBtn(uid) {
@@ -1300,7 +1317,7 @@
         return h('li', {}, h('button', { type: 'button', class: 'sx-chatrow' + (S.chatWith === c.other ? ' on' : ''), onclick: () => openChat(c.other) },
           avatar(c.other, 40, true),
           h('span', { class: 'sx-person-t' },
-            h('span', { class: 'sx-chatrow-top' }, h('b', { translate: 'no' }, nameOf(c.other)), h('span', { class: 's' }, shortTime(c.lastAt))),
+            h('span', { class: 'sx-chatrow-top' }, nameEl(c.other), h('span', { class: 's' }, shortTime(c.lastAt))),
             h('span', { class: 's sx-snip' + (unread ? ' unread' : '') }, c.last ? [c.last.from === me ? h('span', {}, 'Ты: ') : null, h('span', { translate: 'no' }, c.last.text || '')] : 'Нет сообщений')),
           unread ? h('span', { class: 'sx-unread' }) : null));
       })) : h('p', { class: 's', style: 'padding:12px' }, 'Переписок пока нет. Открой друга во вкладке «Друзья» и нажми «Написать».'));
@@ -1315,7 +1332,7 @@
       h('button', { type: 'button', class: 'icon-btn sx-back', 'aria-label': 'К списку', html: I.back, onclick: () => { S.chatWith = null; if (S.msgUnsub) { S.msgUnsub(); S.msgUnsub = null; } renderHub(); } }),
       h('button', { type: 'button', class: 'sx-person-main', onclick: () => openProfile(other) },
         avatar(other, 36, true),
-        h('span', { class: 'sx-person-t' }, h('b', { translate: 'no' }, p ? p.name : '…'), h('span', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(other)))),
+        h('span', { class: 'sx-person-t' }, nameEl(other, '…'), h('span', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(other)))),
       Call.info().inCall && canWrite ? button('Позвать в канал', () => inviteToCall(other)) : null,
       callBtn(other));
 
@@ -1353,9 +1370,10 @@
     const fresh = S.seenReady && !S.seenMsgs.has(m.id);
     S.seenMsgs.add(m.id);
     const el = h('div', { class: 'sx-msg' + (grouped ? ' grouped' : '') + (mine ? ' mine' : '') + (lit ? ' lit' : '') + (fresh ? ' new' : ''), 'data-mid': m.id });
-    const side = grouped ? h('span', { class: 'sx-msg-time-side', text: at ? timeFmt.format(new Date(at)) : '' }) : avatar(m.from, 36, false);
+    const side = grouped ? h('span', { class: 'sx-msg-time-side', text: at ? timeFmt.format(new Date(at)) : '' })
+      : h('button', { type: 'button', class: 'sx-avbtn', 'aria-label': 'Профиль', onclick: () => openProfile(m.from) }, avatar(m.from, 36, false));
     const content = h('div', { class: 'sx-msg-c' });
-    if (!grouped) content.append(h('div', { class: 'sx-msg-h' }, h('b', { translate: 'no' }, nameOf(m.from)), h('span', { class: 's', title: at ? new Date(at).toLocaleString(Call.prefs().lang === 'en' ? 'en-GB' : 'ru') : '' }, at ? timeFmt.format(new Date(at)) : 'отправляется…')));
+    if (!grouped) content.append(h('div', { class: 'sx-msg-h' }, h('button', { type: 'button', class: 'sx-who', onclick: () => openProfile(m.from) }, nameEl(m.from)), h('span', { class: 's', title: at ? new Date(at).toLocaleString(Call.prefs().lang === 'en' ? 'en-GB' : 'ru') : '' }, at ? timeFmt.format(new Date(at)) : 'отправляется…')));
     const isCall = m.call === 'missed';
     if (m.deleted) content.append(h('div', { class: 'sx-msg-t deleted' }, 'Сообщение удалено'));
     else if (isCall) {
@@ -1480,6 +1498,7 @@
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Профиль'),
         h('p', { class: 's' }, 'Изменения сразу видят друзья и люди в звонке.'),
         profileForm({ initial: S.me })),
+      looksSection(),
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Оформление'),
         h('div', { class: 'themes', role: 'radiogroup', 'aria-label': 'Тема', 'data-pref': 'theme' },
           [['holo', 'Hologram'], ['deep', 'Deep Field'], ['solar', 'Solar Flare']].map(([v, t]) => h('button', { type: 'button', role: 'radio', class: 'theme-opt', 'data-v': v, 'aria-checked': String(Call.prefs().theme === v) },
@@ -1498,6 +1517,83 @@
         h('div', { class: 'sx-acct-row' }, button('Скопировать мой тег', () => copyText('@' + S.me.tag, 'Тег скопирован')), button('Выйти из аккаунта', signOut))),
       adminBox);
   }
+  // ----- profile tab: banner, name colour, "about me" -----
+  // A banner is cut to a 3:1 strip and squeezed to about 100 KB (the database takes up to 200 000 characters).
+  async function imageToBanner(src) {
+    const img = await createImageBitmap(src);
+    let sw = img.width, sh = img.width / 3;
+    if (sh > img.height) { sh = img.height; sw = sh * 3; }
+    for (const [w, qs] of [[960, [0.82, 0.68, 0.55]], [720, [0.6, 0.45, 0.35]]]) {
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = w / 3;
+      cv.getContext('2d').drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+      for (const q of qs) { const url = cv.toDataURL('image/webp', q); if (url.length <= 140000) return url; }
+    }
+    throw new Error('too big');
+  }
+  // the draft lives in S.look so redraws (status ticks, new messages) don't drop it
+  function looksDraft() {
+    if (!S.look) {
+      const mine = cardCache.get(myUid()), cd = mine && mine.data;
+      S.look = { color: colorOf(S.me), banner: cd ? safeBanner(cd.banner) : '', bio: cd && typeof cd.bio === 'string' ? cd.bio : '', dirty: false };
+      if (!mine) loadCard(myUid()).then(() => { if (S.look && !S.look.dirty) resetLooks(); });
+    }
+    return S.look;
+  }
+  // Start the draft over from what is saved. The text box is set here too: a redraw keeps what's typed in it.
+  function resetLooks() {
+    S.look = null;
+    const ta = $('#sxBio'), cd = (cardCache.get(myUid()) || {}).data;
+    if (ta) ta.value = cd && typeof cd.bio === 'string' ? cd.bio : '';
+    renderHub();
+  }
+  async function saveLooks(bioText) {
+    const L = S.look, D = S.F.D, uid = myUid();
+    if (!L) return;
+    const bio = String(bioText || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 190);
+    try {
+      if (L.color !== colorOf(S.me)) await D.updateDoc(d('users', uid), { color: L.color || D.deleteField() });
+      if (L.banner || bio) await D.setDoc(d('cards', uid), Object.assign({ at: now() }, L.banner ? { banner: L.banner } : {}, bio ? { bio } : {}));
+      else await D.deleteDoc(d('cards', uid));
+      cardCache.delete(uid);
+      S.look = null;
+      toast('Оформление сохранено');
+      renderAll();
+    } catch (e) { toast('Не сохранилось: ' + errText(e)); }
+  }
+  function looksSection() {
+    if (!S.v2) return null;
+    const L = looksDraft();
+    const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0]; if (!f) return;
+      try { L.banner = await imageToBanner(f); L.dirty = true; renderHub(); }
+      catch (e) { toast('Не получилось открыть картинку'); }
+    });
+    const preview = h('div', { class: 'sx-look' },
+      h('div', { class: 'sx-card-banner', style: L.banner ? 'background-image:url("' + L.banner + '")' : L.color ? 'background:var(--nc-' + L.color + ')' : null }),
+      h('div', { class: 'sx-look-who' }, avatar(myUid(), 56, false),
+        h('b', { translate: 'no', style: L.color ? 'color:var(--nc-' + L.color + ')' : null }, S.me.name)));
+    const swatches = h('div', { class: 'sx-swatches', role: 'radiogroup', 'aria-label': 'Цвет ника' },
+      [0].concat(COLORS.map((x, i) => i + 1)).map((n) => h('button', {
+        type: 'button', role: 'radio', class: 'sx-sw' + (n ? '' : ' none'), 'aria-checked': String(L.color === n),
+        title: n ? COLORS[n - 1] : 'Без цвета', 'aria-label': n ? COLORS[n - 1] : 'Без цвета', style: n ? 'background:var(--nc-' + n + ')' : null,
+        onclick: () => { L.color = n; L.dirty = true; renderHub(); }
+      })));
+    const bio = h('textarea', { id: 'sxBio', rows: '3', maxlength: '190', placeholder: 'Пара слов о себе: во что играешь, когда на связи…' });
+    bio.value = L.bio;
+    const count = h('span', { class: 's sx-count' }, L.bio.length + ' / 190');
+    bio.addEventListener('input', () => { L.bio = bio.value; L.dirty = true; count.textContent = bio.value.length + ' / 190'; });
+    return h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Оформление профиля'),
+      h('p', { class: 's' }, 'Так тебя видят в карточке профиля. Цвет ника — во всех списках и в звонке.'),
+      preview, file,
+      h('div', { class: 'sx-acct-row' }, button(L.banner ? 'Сменить баннер' : 'Выбрать баннер', () => file.click()),
+        L.banner ? button('Убрать баннер', () => { L.banner = ''; L.dirty = true; renderHub(); }) : null),
+      h('div', { class: 'lbl' }, 'Цвет ника'), swatches,
+      h('label', { class: 'lbl', for: 'sxBio' }, 'О себе'), bio, count,
+      h('div', { class: 'sx-acct-row' }, button('Сохранить оформление', () => saveLooks(bio.value), 'btn-primary'),
+        L.dirty ? button('Отменить', resetLooks) : null));
+  }
+
   // ----- profile tab: my own status and games -----
   const NOTE_EMOJI = ['🎮', '🎧', '💤', '📚', '🍕', '🔥', '😎', '🚫'];
   // windows that are never a game (and our own)
@@ -1607,19 +1703,45 @@
         acts.push(button('Заблокировать', () => block(uid).then(paint)));
       }
       if (S.isAdmin && uid !== me) acts.push(button('Модерация', () => { card.hidden = true; S.tab = 'admin'; S.adminSearch.sel = uid; show(true); }));
-      card.append(h('div', { class: 'modal-box sx-card' },
-        h('div', { class: 'drawer-head' }, h('h2', {}, 'Профиль'), h('button', { type: 'button', class: 'icon-btn', html: I.close, 'aria-label': 'Закрыть', onclick: () => { card.hidden = true; } })),
-        h('div', { class: 'sx-card-main' }, avatar(uid, 88, true),
-          h('div', {}, h('div', { class: 'sx-card-name', translate: 'no' }, p ? p.name : 'Загрузка…'), h('div', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(uid)),
-            noteOf(uid) ? h('div', { class: 'sx-note', translate: 'no' }, noteOf(uid)) : null,
-            gameLine(uid), voiceLine(uid),
-            p && p.mod && p.mod.banned ? h('div', { class: 'err' }, 'Заблокирован администратором') : null)),
-        h('div', { class: 'sx-acct-row' }, acts)));
+      const cd = (cardCache.get(uid) || {}).data || null;
+      const banner = cd ? safeBanner(cd.banner) : '';
+      const bio = cd && typeof cd.bio === 'string' ? cd.bio.slice(0, 190) : '';
+      const c = colorOf(p), since = p ? ms(p.createdAt) : 0;
+      const bs = BADGES.filter(([id]) => badgeIds(p).includes(id));
+      card.append(h('div', { class: 'modal-box sx-card', 'aria-label': 'Профиль' },
+        h('div', { class: 'sx-card-banner', style: banner ? 'background-image:url("' + banner + '")' : c ? 'background:var(--nc-' + c + ')' : null }),
+        h('button', { type: 'button', class: 'icon-btn sx-card-x', html: I.close, 'aria-label': 'Закрыть', onclick: () => { card.hidden = true; } }),
+        h('div', { class: 'sx-card-body' },
+          h('div', { class: 'sx-card-av' }, avatar(uid, 96, true)),
+          h('div', { class: 'sx-card-name', translate: 'no', style: c ? 'color:var(--nc-' + c + ')' : null }, p ? p.name : 'Загрузка…'),
+          h('div', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(uid)),
+          bs.length ? h('div', { class: 'sx-chips' }, bs.map(([, e, t]) => h('span', { class: 'sx-chip' }, h('span', {}, e), h('span', {}, t)))) : null,
+          noteOf(uid) ? h('div', { class: 'sx-note', translate: 'no' }, noteOf(uid)) : null,
+          gameLine(uid), voiceLine(uid),
+          p && p.mod && p.mod.banned ? h('div', { class: 'err' }, 'Заблокирован администратором') : null,
+          bio ? h('div', { class: 'sx-card-sec' }, h('div', { class: 'lbl' }, 'О себе'), h('div', { class: 'sx-bio', translate: 'no' }, bio)) : null,
+          since ? h('div', { class: 's sx-since' }, 'В Walkie-Talkie с ' + dayYearFmt.format(new Date(since))) : null,
+          h('div', { class: 'sx-acct-row' }, acts))));
     };
     paint();
     card.hidden = false;
     card._paint = paint;
+    card._uid = uid;
+    loadCard(uid).then(() => { if (!card.hidden && card._uid === uid) paint(); });
   }
+  // Banner and "about me" live in cards/<uid>; read only when a card opens, kept for a minute.
+  const cardCache = new Map(); // uid -> { at, data }
+  async function loadCard(uid) {
+    const c = cardCache.get(uid);
+    if (!S.v2 || (c && Date.now() - c.at < 60000)) return c ? c.data : null;
+    try {
+      const s = await S.F.D.getDoc(d('cards', uid));
+      const data = s.exists() ? s.data() : null;
+      cardCache.set(uid, { at: Date.now(), data });
+      return data;
+    } catch (e) { return c ? c.data : null; }
+  }
+  const safeBanner = (u) => (typeof u === 'string' && /^data:image\/(webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(u) ? u : '');
 
   // ----- admin tab -----
   function viewAdmin() {
@@ -1662,7 +1784,36 @@
       sw('sound', 'Стримы только без звука'),
       sw('dm', 'Запретить личные сообщения'),
       reason,
-      h('div', { class: 'sx-acct-row' }, button('Сохранить', () => { m.reason = reason.value; S.modDraft = null; saveMod(uid, m); }, 'btn-primary'), button('Закрыть', () => { S.modDraft = null; S.adminSearch.sel = null; renderHub(); })));
+      h('div', { class: 'sx-acct-row' }, button('Сохранить', () => { m.reason = reason.value; S.modDraft = null; saveMod(uid, m); }, 'btn-primary'), button('Закрыть', () => { S.modDraft = null; S.adminSearch.sel = null; renderHub(); })),
+      S.v2 ? badgeEditor(uid, p) : null);
+  }
+  // Badges switch at once. "Создатель" and "Админ" — only the e-mails in the rules (S.adminByEmail),
+  // also to themselves; an admin by password gives the others, and never to himself (the database checks).
+  function badgeEditor(uid, p) {
+    const cur = badgeIds(p), self = uid === myUid(), top = !!S.adminByEmail;
+    const rows = BADGES.map(([id, e, t]) => {
+      const locked = id === 'creator' || id === 'admin' ? !top : self && !top;
+      const b = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(cur.includes(id)), 'aria-label': t, disabled: locked });
+      b.addEventListener('click', () => setBadge(uid, id, !cur.includes(id)));
+      return h('div', { class: 'set-row' },
+        h('div', { class: 'set-text' }, h('div', { class: 't' }, h('span', {}, e + ' '), h('span', {}, t)),
+          locked ? h('div', { class: 's' }, id === 'creator' || id === 'admin' ? 'Выдают только владельцы проекта (почта в правилах базы)' : 'Себе значки выдавать нельзя') : null),
+        b);
+    });
+    return h('div', { class: 'sx-col0' }, h('h4', {}, 'Значки'), rows,
+      h('h4', {}, 'Карточка профиля'),
+      h('p', { class: 's' }, 'Если баннер или «о себе» неприличные — их можно убрать. Человек сможет поставить новые.'),
+      h('div', { class: 'sx-acct-row' }, button('Убрать баннер и «о себе»', (ev) => menu(ev.currentTarget, [{ text: 'Да, убрать', danger: true, run: () => removeCard(uid) }]))));
+  }
+  async function setBadge(uid, id, on) {
+    const cur = badgeIds(S.profiles.get(uid));
+    const next = BADGES.map(([x]) => x).filter((x) => (x === id ? on : cur.includes(x)));
+    try { await S.F.D.updateDoc(d('users', uid), { badges: next }); toast(on ? 'Значок выдан' : 'Значок снят'); }
+    catch (e) { toast('Не получилось: ' + errText(e)); }
+  }
+  async function removeCard(uid) {
+    try { await S.F.D.deleteDoc(d('cards', uid)); cardCache.delete(uid); toast('Баннер и «о себе» убраны'); }
+    catch (e) { toast('Не получилось: ' + errText(e)); }
   }
 
   // ----- first login: set up the profile -----
@@ -1807,6 +1958,39 @@
 .sx-msg.new { animation: wt-rise .22s var(--ease); }
 .sx-chatrow, .sx-person { transition: background-color .14s var(--ease); }
 #sxCard, #sxSetup { z-index: 35; }
+.sx-nm { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sx-nm b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-bdg { flex: none; font-size: .78rem; font-weight: 400; letter-spacing: 1px; }
+.sx-who, .sx-avbtn { border: none; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.sx-who:hover b { text-decoration: underline; }
+.sx-avbtn { display: grid; align-self: start; border-radius: 50%; }
+.sx-card { padding: 0; gap: 0; overflow: hidden auto; position: relative; }
+.sx-card-banner { height: 132px; background: var(--hero); background-size: cover; background-position: center; flex: none; }
+.sx-card-x { position: absolute; top: 12px; right: 12px; background: var(--shade); border-color: transparent; color: var(--cap-fg); }
+.sx-card-x:hover { border-color: var(--cap-fg); }
+.sx-card-body { display: flex; flex-direction: column; gap: 6px; padding: 0 22px 22px; }
+.sx-card-av { margin-top: -52px; align-self: flex-start; padding: 4px; border-radius: 50%; background: var(--panel); }
+.sx-card-body .sx-card-name { font-size: 1.35rem; overflow-wrap: anywhere; margin-top: 2px; }
+.sx-card-body .sx-acct-row { margin-top: 10px; }
+.sx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.sx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 8px; border-radius: 999px; background: var(--raise); border: 1px solid var(--line); font-size: .8rem; font-weight: 600; }
+.sx-card-sec { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.sx-bio { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.sx-since { margin-top: 6px !important; font-size: .78rem !important; }
+.sx-look { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); max-width: 460px; }
+.sx-look .sx-card-banner { height: 110px; }
+.sx-look-who { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px 14px; margin-top: -28px; }
+.sx-look-who .sx-av { box-shadow: 0 0 0 4px var(--panel); }
+.sx-look-who b { font-family: var(--f-display); font-size: 1.1rem; padding-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.sx-sw { width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line-2); cursor: pointer; }
+.sx-sw.none { background: linear-gradient(135deg, transparent 45%, var(--muted) 45% 55%, transparent 55%), var(--raise); }
+.sx-sw[aria-checked="true"] { box-shadow: 0 0 0 2px var(--fg); }
+.sx-sw:hover { transform: scale(1.08); }
+#sxBio { width: 100%; resize: vertical; min-height: 72px; background: var(--raise); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 15px; font: inherit; }
+#sxBio:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sx-count { align-self: flex-end; font-size: .75rem !important; }
+.sx-col0 { display: flex; flex-direction: column; gap: 10px; }
 .sx-voice { display: flex; align-items: center; gap: 5px; margin-top: 1px; font-size: .8rem; color: var(--ok); white-space: nowrap; overflow: hidden; }
 .sx-voice .ic { display: grid; flex: none; }
 .sx-voice > span:last-child { overflow: hidden; text-overflow: ellipsis; }
@@ -1894,7 +2078,7 @@
     if (S.me) renderAll();
   }, 30000);
   fb().then(() => {
-    if (TEST) onUser({ uid: TEST.uid, email: TEST.uid + '@test.local', displayName: TEST.name || '', photoURL: '' });
+    if (TEST) onUser({ uid: TEST.uid, email: testEmail(), displayName: TEST.name || '', photoURL: '' });
     else S.F.A.onAuthStateChanged(S.F.auth, onUser);
     if (APP.pendingLink) APP.pendingLink().then((l) => { if (l) setTimeout(() => openLink(l), 1500); }).catch(() => {});
     if (APP.onLink) APP.onLink(openLink);
