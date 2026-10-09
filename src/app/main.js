@@ -4,7 +4,7 @@
 //  • свой выбор экрана или окна для стрима, со звуком компьютера;
 //  • обновляется сама (updater.js), запускает её loader.js.
 'use strict';
-const { app, BrowserWindow, session, desktopCapturer, ipcMain, Menu, nativeTheme, shell, powerMonitor } = require('electron');
+const { app, BrowserWindow, session, desktopCapturer, ipcMain, Menu, nativeTheme, shell, powerMonitor, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -52,8 +52,9 @@ function sendLink(link) {
 }
 ipcMain.handle('racia:pending-link', () => { const l = pendingLink; pendingLink = null; return l; });
 
+const AUMID = 'ICEING.Racia';
 function start() {
-  if (process.platform === 'win32') app.setAppUserModelId('ICEING.Racia');
+  if (process.platform === 'win32') { app.setAppUserModelId(AUMID); fixShortcut(); }
   try {
     if (process.defaultApp) app.setAsDefaultProtocolClient('racia', process.execPath, [path.resolve(process.argv[1] || '.')]);
     else app.setAsDefaultProtocolClient('racia');
@@ -70,6 +71,41 @@ ipcMain.handle('racia:info', () => ({ version: R.version }));
 // Мигнуть значком на панели задач (новое сообщение).
 ipcMain.on('racia:flash', () => { if (win && !win.isFocused()) win.flashFrame(true); });
 app.on('browser-window-focus', () => { if (win) win.flashFrame(false); });
+
+// ---------- уведомления Windows (звонок, когда окно свёрнуто или под игрой) ----------
+// Звук у звонка свой, поэтому уведомление беззвучное. Клик по нему открывает окно.
+const notes = new Map(); // метка → уведомление
+function closeNote(tag) {
+  const n = notes.get(tag); notes.delete(tag);
+  if (n) { try { n.close(); } catch (e) {} }
+}
+ipcMain.on('racia:notify', (e, n) => {
+  if (!n || !Notification.isSupported()) return;
+  const tag = String(n.tag || '').slice(0, 40);
+  closeNote(tag);
+  let icon = [path.join(__dirname, 'wt.ico'), path.join(__dirname, 'racia.ico')].find((p) => fs.existsSync(p));
+  try { if (/^data:image\/png;base64,/.test(n.icon || '')) icon = nativeImage.createFromDataURL(n.icon); } catch (err) {}
+  const note = new Notification({ title: String(n.title || 'Walkie-Talkie').slice(0, 100), body: String(n.body || '').slice(0, 200), icon, silent: true });
+  note.on('click', () => {
+    if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+  });
+  note.on('close', () => { if (notes.get(tag) === note) notes.delete(tag); });
+  notes.set(tag, note);
+  note.show();
+});
+ipcMain.on('racia:notify-close', (e, tag) => closeNote(String(tag || '')));
+// Windows показывает уведомления программы, только если у её ярлыка в «Пуске» тот же AppUserModelID.
+// Установщик его не ставит — дописываем сами, и только своему ярлыку (тестовые копии его не трогают).
+function fixShortcut() {
+  try {
+    const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Walkie-Talkie.lnk');
+    if (!fs.existsSync(lnk)) return;
+    const s = shell.readShortcutLink(lnk);
+    if (path.resolve(s.target || '').toLowerCase() !== path.resolve(process.execPath).toLowerCase()) return;
+    if (s.appUserModelId === AUMID) return;
+    shell.writeShortcutLink(lnk, 'update', { appUserModelId: AUMID });
+  } catch (e) {}
+}
 
 // ---------- вход через Google ----------
 // Google не пускает входить из окон внутри программ, поэтому вход идёт в обычном браузере:

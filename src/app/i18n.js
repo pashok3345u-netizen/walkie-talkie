@@ -230,7 +230,15 @@
     'Картинка слишком большая.': 'The picture is too big.', 'Это не картинка, или её не получилось открыть.': 'That’s not a picture, or it couldn’t be opened.',
     'Чат этого канала': 'This channel’s chat', 'Очистить историю на этом компьютере': 'Clear the history on this computer',
     'История очищена у тебя. У друзей она осталась.': 'History cleared on your computer. Your friends still have it.',
-    'Запретить писать в чат': 'Ban from the chat', 'без чата': 'no chat'
+    'Запретить писать в чат': 'Ban from the chat', 'без чата': 'no chat',
+    // ---------- calls to a friend ----------
+    'Позвонить': 'Call', 'Ты уже звонишь': 'You are already calling', 'Входящий звонок': 'Incoming call',
+    'Звонит тебе': 'Calling you', 'Зовёт тебя в свой канал': 'Invites you to their channel', 'Звоню…': 'Calling…',
+    'Звоню… Не беспокоить — может не ответить': 'Calling… Do not disturb — may not answer', 'Звоню… Не в сети — может не ответить': 'Calling… Offline — may not answer',
+    'Звонок без ответа': 'Unanswered call', 'Пропущенный звонок': 'Missed call',
+    'Позвонить ещё раз': 'Call again', 'Перезвонить': 'Call back', 'Звонок уже закончился': 'The call has already ended',
+    'Не получилось позвонить. Если только что звонил — подожди 15 секунд.': 'Could not call. If you have just called, wait 15 seconds.',
+    'У друга старая версия Walkie-Talkie — отправляю приглашение в личку': 'Your friend has an old Walkie-Talkie — sending an invitation in DMs instead'
   };
   const map = new Map(Object.entries(EN));
   const CYR = /[А-Яа-яЁё]/;
@@ -281,6 +289,12 @@
     [/^Переслано от (.+)$/, (m) => 'Forwarded from ' + m[1]],
     [/^Переслано: (.+)$/, (m) => 'Forwarded to ' + m[1]],
     [/^Зайти в канал (.+)$/, (m) => 'Join channel ' + m[1]],
+    [/^Нет ответа: (.+)$/, (m) => 'No answer: ' + m[1]],
+    [/^Звонок принят: (.+)$/, (m) => 'Call answered: ' + m[1]],
+    [/^Пропущенный звонок: (.+)$/, (m) => 'Missed call: ' + m[1]],
+    [/^(.+) сейчас не может ответить$/, (m) => m[1] + ' can’t answer right now'],
+    [/^(.+) тоже звонит тебе$/, (m) => m[1] + ' is calling you too'],
+    [/^(.+) сейчас зайдёт к тебе в канал$/, (m) => m[1] + ' is coming to your channel'],
     [/^Вход через Google: (.*)$/, (m) => 'Signed in with Google: ' + m[1]],
     [/^Не получилось зайти в канал: (.*)$/, (m) => 'Could not join the channel: ' + subOr(m[1])],
     [/^(Не получилось войти|Не получилось проверить|Не загрузился профиль|Связь с сервером|Не получилось|Поиск|Сообщения|Не отправилось|Не переслалось|Не сохранилось): (.*)$/,

@@ -12,12 +12,16 @@
 //                and `return` a value (goes to the log). window.__racia = { st, settings, members, rms, chat }
 //   --shot=<png> a picture of the window just before quitting; --size=1400x860 sets the window size
 //   --theme=holo|deep|solar, --lang=ru|en
+//   --fb=<host:port>/<uid>  accounts against the local Firestore emulator, signed in as <uid> without
+//                Google (fb-seed.js makes the profiles and friendships). Without --code the copy doesn't
+//                join a channel by itself, and --do seconds count from the page being ready.
 // The JSON also has "chat": what the chat panel holds (names, texts, pictures, edits, reactions…).
+// Windows notifications are not shown, only written to the log ("notification: …").
 //
 // Manual check: the real microphone, nothing automatic — the owner tries the new version by hand.
-//   electron.exe <this dir> --app=<app dir> --data=<userData dir> --manual=1 [--label=2] [--fakemic=1]
+//   electron.exe <this dir> --app=<app dir> --data=<userData dir> --manual=1 [--label=2] [--fakemic=1] [--fb=…]
 'use strict';
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -36,8 +40,10 @@ if (!MANUAL || arg('fakemic') === '1') {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 }
-// Leave the real system alone: the racia:// links stay with the installed program.
+// Leave the real system alone: the racia:// links stay with the installed program, and the automatic
+// test puts no pop-ups on the desktop.
 app.setAsDefaultProtocolClient = () => true;
+if (!MANUAL) Notification.prototype.show = function () { log('notification: ' + this.title + ' — ' + this.body); };
 // Open the page with ?debug so window.__racia (st, members) is reachable.
 app.on('web-contents-created', (e, wc) => {
   const orig = wc.loadFile.bind(wc);
@@ -93,8 +99,22 @@ if (MANUAL) {
   });
 }
 
+// --fb=<host:port>/<uid>: the account part talks to the local emulator as <uid> (no Google)
+const fbm = /^([^/]+)\/([A-Za-z0-9]+)$/.exec(arg('fb', ''));
+const FB_JS = fbm ? `localStorage.setItem('racia-test-fb', ${JSON.stringify(JSON.stringify({ emu: fbm[1], uid: fbm[2] }))});` : `localStorage.removeItem('racia-test-fb');`;
+
 app.whenReady().then(() => {
-  if (MANUAL) return;
+  if (MANUAL) {
+    // the manual check with made-up accounts: set the test account once, then hands off
+    if (!fbm) return;
+    const t = setInterval(async () => {
+      const w = BrowserWindow.getAllWindows()[0];
+      if (!w || w.webContents.isLoading()) return;
+      clearInterval(t);
+      await w.webContents.executeJavaScript(`if (localStorage.getItem('racia-test-fb') !== ${JSON.stringify(JSON.stringify({ emu: fbm[1], uid: fbm[2] }))}) { ${FB_JS} location.reload(); } true`);
+    }, 500);
+    return;
+  }
   let stage = 0;
   const tick = setInterval(async () => {
     const w = BrowserWindow.getAllWindows()[0];
@@ -119,16 +139,18 @@ app.whenReady().then(() => {
         // --size=1400x860
         const size = /^(\d+)x(\d+)$/.exec(arg('size', ''));
         if (size) w.setSize(+size[1], +size[2]);
-        await wc.executeJavaScript(`localStorage.setItem('racia-relay-only', '${RELAY ? 1 : 0}'); ${ice} ${setPrefs} location.reload(); true`);
+        await wc.executeJavaScript(`localStorage.setItem('racia-relay-only', '${RELAY ? 1 : 0}'); ${ice} ${setPrefs} ${FB_JS} location.reload(); true`);
         return;
       }
       if (stage === 1) {
         stage = 2;
         await new Promise((r) => setTimeout(r, 1500));
-        await wc.executeJavaScript(`(() => { document.querySelector('#name').value = ${JSON.stringify(NAME)};
-          document.querySelector('#room').value = ${JSON.stringify(CODE)};
-          document.querySelector('#joinView').requestSubmit(); return true; })()`);
-        log('join submitted');
+        if (CODE) {
+          await wc.executeJavaScript(`(() => { document.querySelector('#name').value = ${JSON.stringify(NAME)};
+            document.querySelector('#room').value = ${JSON.stringify(CODE)};
+            document.querySelector('#joinView').requestSubmit(); return true; })()`);
+          log('join submitted');
+        } else log('page ready (not joining)');
         if (arg('fetchtest') === '1') {
           const r = await wc.executeJavaScript(`(async () => {
             const out = [];
