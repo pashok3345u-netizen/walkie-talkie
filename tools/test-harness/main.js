@@ -12,7 +12,7 @@
 //                and `return` a value (goes to the log). window.__racia = { st, settings, members, rms, chat }
 //   --shot=<png> a picture of the window just before quitting; --size=1400x860 sets the window size
 //   --theme=holo|deep|solar, --lang=ru|en
-//   --fb=<host:port>/<uid>  accounts against the local Firestore emulator, signed in as <uid> without
+//   --fb=<host:port>/<uid>[/<e-mail>]  accounts against the local Firestore emulator, signed in as <uid> without
 //                Google (fb-seed.js makes the profiles and friendships). Without --code the copy doesn't
 //                join a channel by itself, and --do seconds count from the page being ready.
 // The JSON also has "chat": what the chat panel holds (names, texts, pictures, edits, reactions…).
@@ -99,9 +99,11 @@ if (MANUAL) {
   });
 }
 
-// --fb=<host:port>/<uid>: the account part talks to the local emulator as <uid> (no Google)
-const fbm = /^([^/]+)\/([A-Za-z0-9]+)$/.exec(arg('fb', ''));
-const FB_JS = fbm ? `localStorage.setItem('racia-test-fb', ${JSON.stringify(JSON.stringify({ emu: fbm[1], uid: fbm[2] }))});` : `localStorage.removeItem('racia-test-fb');`;
+// --fb=<host:port>/<uid>[/<e-mail>]: the account part talks to the local emulator as <uid> (no Google);
+// the e-mail matters for the admins listed in the rules (it never leaves this computer)
+const fbm = /^([^/]+)\/([A-Za-z0-9]+)(?:\/([^/\s]+@[^/\s]+))?$/.exec(arg('fb', ''));
+const FB_CFG = fbm ? JSON.stringify(Object.assign({ emu: fbm[1], uid: fbm[2] }, fbm[3] ? { email: fbm[3] } : {})) : '';
+const FB_JS = fbm ? `localStorage.setItem('racia-test-fb', ${JSON.stringify(FB_CFG)});` : `localStorage.removeItem('racia-test-fb');`;
 
 app.whenReady().then(() => {
   if (MANUAL) {
@@ -111,7 +113,7 @@ app.whenReady().then(() => {
       const w = BrowserWindow.getAllWindows()[0];
       if (!w || w.webContents.isLoading()) return;
       clearInterval(t);
-      await w.webContents.executeJavaScript(`if (localStorage.getItem('racia-test-fb') !== ${JSON.stringify(JSON.stringify({ emu: fbm[1], uid: fbm[2] }))}) { ${FB_JS} location.reload(); } true`);
+      await w.webContents.executeJavaScript(`if (localStorage.getItem('racia-test-fb') !== ${JSON.stringify(FB_CFG)}) { ${FB_JS} location.reload(); } true`);
     }, 500);
     return;
   }

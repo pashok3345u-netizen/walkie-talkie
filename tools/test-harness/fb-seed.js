@@ -2,7 +2,7 @@
 // loads the rules, wipes everything, makes profiles and friendships.
 //   set ELECTRON_RUN_AS_NODE=1
 //   electron.exe fb-seed.js --emu=127.0.0.1:8085 --rules=<firestore.rules>
-//     --users=alice:Алиса,bob:Боб[,carl:Карл] [--friends=alice+bob,alice+carl] [--avatars=1]
+//     --users=alice:Алиса,bob:Боб[,carl:Карл] [--friends=alice+bob,alice+carl] [--avatars=1] [--admins=bob]
 // A user "alice" gets the uid "alice" padded with zeros to 28 characters (like a real one) and the tag "alice".
 // Prints the uids as JSON.
 'use strict';
@@ -69,6 +69,8 @@ function avatar(i) {
     if (arg('avatars') === '1') p.avatar = avatar(i);
     await put('users/' + uid, p);
   }
+  // --admins=padm: administrators "by password" (written past the rules, the password isn't checked here)
+  for (const a of arg('admins', '').split(',').filter(Boolean)) await put('admins/' + uidOf(a), { pass: 'seeded', at: new Date() });
   for (const f of arg('friends', '').split(',').filter(Boolean)) {
     const [a, b] = f.split('+').map(uidOf);
     await put('friends/' + pair(a, b), { users: [a, b], from: a, status: 'accepted', at: new Date() });
