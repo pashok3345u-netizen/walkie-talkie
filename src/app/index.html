@@ -624,7 +624,7 @@ button.live:hover { filter: brightness(1.1); }
 .vtile.self .vctl { opacity: 1; }
 
 /* dock */
-.dock-inner { display: flex; align-items: stretch; justify-content: center; gap: 8px; width: 100%; max-width: 660px; }
+.dock-inner { display: flex; align-items: stretch; justify-content: center; gap: 8px; width: 100%; max-width: 760px; }
 .mic-btn {
   flex: 1 1 220px;
   max-width: 270px;
@@ -680,6 +680,7 @@ button.live:hover { filter: brightness(1.1); }
   border-radius: 9px; background: var(--live); color: var(--on-live);
   font-size: .64rem; font-weight: 700; line-height: 18px; text-align: center; letter-spacing: 0;
 }
+.tool .badge.ment { background: var(--accent); color: var(--on-accent); }
 .tool.leave:hover { border-color: var(--danger); }
 .hint { margin: 0; color: var(--muted); font-size: .76rem; text-align: center; }
 
@@ -877,7 +878,7 @@ option { background: var(--panel); color: var(--fg); }
 .net li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; color: var(--muted); }
 .net li i { width: 10px; height: 3px; border-radius: 2px; flex: none; }
 .net li b { flex: 1 1 auto; color: var(--fg); font-weight: 600; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.net li span { margin-left: auto; font-family: var(--f-mono); font-size: .72rem; white-space: nowrap; }
+.net li span { margin-left: auto; font-family: var(--f-mono); font-size: .72rem; }
 
 /* toast */
 .toast {
@@ -980,6 +981,99 @@ option { background: var(--panel); color: var(--fg); }
 .modal-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 .modal-foot .set-row { flex: 1 1 320px; }
 .foot-btns { display: flex; gap: 8px; margin-left: auto; }
+
+/* ---------- chat in the channel: a third column on the right (slides over the stage when the window is narrow) ---------- */
+.call.chat-open {
+  grid-template-columns: 330px minmax(0, 1fr) 380px;
+  grid-template-areas: "head main chat" "list main chat" "list dock chat";
+}
+.chat { grid-area: chat; position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+.chat-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.chat-head h2 { margin: 0 auto 0 0; font-family: var(--f-display); font-weight: 700; font-size: 1.1rem; letter-spacing: -.01em; }
+.chat-head .icon-btn { width: 34px; height: 34px; color: var(--muted); }
+.chat-head .icon-btn:hover { color: var(--fg); }
+.chat-old { margin: 10px 12px 0; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--line-2); color: var(--muted); font-size: .78rem; }
+.chat-scroll { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-msgs { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 6px 14px; }
+.chat-jump { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent); font-size: .78rem; font-weight: 600; box-shadow: 0 8px 22px var(--overlay); }
+.cm-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 100%; min-height: 160px; padding: 20px; text-align: center; color: var(--muted); font-size: .85rem; }
+.cm-empty .big { font-family: var(--f-display); font-weight: 700; font-size: 1rem; color: var(--fg); }
+.cm-day { display: flex; align-items: center; gap: 10px; margin: 14px 8px 4px; color: var(--muted); font-family: var(--f-mono); font-size: .62rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.cm-day::before, .cm-day::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.cm-msg { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; padding: 5px 8px 3px; margin-top: 6px; border-radius: 12px; }
+.cm-msg.grouped { margin-top: 0; padding-top: 1px; }
+.cm-msg:hover, .cm-msg:focus-within { background: var(--raise); }
+.cm-msg.ment { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.cm-msg.lit { animation: cm-lit 1.8s ease; }
+@keyframes cm-lit { from { background: var(--accent-soft); } }
+.cm-av { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-family: var(--f-display); font-weight: 700; font-size: .85rem; }
+.cm-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cm-side-time { font-family: var(--f-mono); font-size: .6rem; color: var(--muted); text-align: right; padding-top: 4px; opacity: 0; }
+.cm-msg:hover .cm-side-time { opacity: 1; }
+.cm-c { min-width: 0; }
+.cm-h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cm-h b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-h .s { flex: none; font-size: .7rem; color: var(--muted); }
+.cm-t { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; line-height: 1.42; }
+.cm-t.deleted { color: var(--muted); font-style: italic; font-size: .84rem; }
+.cm-ed { color: var(--muted); font-size: .72rem; }
+.cm-link { color: var(--accent); }
+.cm-at { color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 0 3px; font-weight: 600; }
+.cm-at.me { background: var(--accent); color: var(--on-accent); }
+.cm-re { display: flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 0 0 2px; border: none; background: transparent; color: var(--muted); font-size: .76rem; text-align: left; }
+.cm-re svg { flex: none; }
+.cm-re b { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 600; }
+.cm-re span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-re:hover span { color: var(--fg); }
+.cm-img { display: block; margin-top: 4px; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--video-bg); max-width: 100%; cursor: zoom-in; }
+.cm-img img { display: block; max-width: 100%; height: auto; }
+.cm-img.gone { display: grid; place-items: center; padding: 6px; background: var(--raise); border-style: dashed; color: var(--muted); font-size: .74rem; cursor: default; }
+.cm-rxs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.cm-rx { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--raise); font-size: .8rem; }
+.cm-rx.on { border-color: var(--accent); background: var(--accent-soft); }
+.cm-rx:disabled { opacity: 1; cursor: default; }
+.cm-fail { color: var(--danger); font-size: .74rem; }
+.cm-bar { position: absolute; top: -13px; right: 8px; z-index: 1; display: none; gap: 2px; padding: 3px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 18px var(--overlay); }
+.cm-msg:hover .cm-bar, .cm-msg:focus-within .cm-bar { display: flex; }
+.cm-bar button { width: 30px; height: 28px; display: grid; place-items: center; border: none; border-radius: 999px; background: transparent; color: var(--muted); }
+.cm-bar button:hover { background: var(--raise); color: var(--fg); }
+.cm-rxpick { display: flex; gap: 2px; padding: 2px; }
+.cm-rxpick button { width: 40px; height: 40px; font-size: 1.3rem; border: none; border-radius: 8px; background: transparent; }
+.cm-rxpick button:hover { background: var(--raise); }
+.chat-compose { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.chat-ctx { display: flex; flex-direction: column; gap: 4px; }
+.cm-ctx { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 5px 5px 10px; border-radius: 10px; background: var(--raise); color: var(--muted); font-size: .8rem; }
+.cm-ctx svg { flex: none; color: var(--accent); }
+.cm-ctx > span:not(.s) { flex: none; white-space: nowrap; }
+.cm-ctx b { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 600; }
+.cm-ctx .s { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-ctx img { width: 44px; height: 44px; flex: none; object-fit: cover; border-radius: 8px; }
+.cm-ctx .x { margin-left: auto; width: 26px; height: 26px; flex: none; display: grid; place-items: center; border: none; border-radius: 50%; background: transparent; color: var(--muted); }
+.cm-ctx .x:hover { background: var(--line); color: var(--fg); }
+.chat-row { display: flex; align-items: flex-end; gap: 6px; }
+.chat-row textarea { flex: 1; min-width: 0; resize: none; min-height: 44px; max-height: 160px; padding: 11px 16px; border-radius: 22px; border: 1px solid var(--line); background: var(--raise); color: var(--fg); font: inherit; font-size: .92rem; line-height: 1.4; }
+.chat-row textarea::placeholder { color: var(--muted); opacity: .75; }
+.chat-row textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.chat-row textarea:disabled { opacity: .6; }
+.chat-row .icon-btn { width: 44px; height: 44px; color: var(--muted); }
+.chat-row .icon-btn:hover:not(:disabled) { color: var(--fg); }
+.chat-row .icon-btn:disabled { opacity: .5; }
+.chat-send { width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%; }
+.chat-why { color: var(--danger); font-size: .76rem; }
+.chat-note { color: var(--muted); font-size: .76rem; }
+.chat-at { position: absolute; left: 12px; right: 12px; bottom: calc(100% - 4px); z-index: 2; display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 14px 40px var(--overlay); }
+.chat-at button { padding: 8px 10px; border: none; border-radius: 10px; background: transparent; text-align: left; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-at button[aria-selected="true"], .chat-at button:hover { background: var(--raise); }
+.chat.drop::after { content: ""; position: absolute; inset: 8px; border: 2px dashed var(--accent); border-radius: var(--r-m); background: var(--accent-soft); pointer-events: none; }
+.cm-light { cursor: zoom-out; }
+.cm-light img { max-width: calc(100vw - 32px); max-height: calc(100dvh - 110px); border-radius: 12px; box-shadow: 0 24px 70px var(--overlay); cursor: default; }
+.cm-light-bar { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.cm-light-box { display: flex; flex-direction: column; align-items: center; }
+@media (max-width: 1180px) {
+  .call.chat-open { grid-template-columns: 330px minmax(0, 1fr); grid-template-areas: "head main" "list main" "list dock"; }
+  .chat { position: fixed; top: 0; right: 0; bottom: 0; z-index: 19; width: min(400px, 100%); box-shadow: -16px 0 50px var(--overlay); }
+  .chat:not([hidden]) { animation: wt-slide .2s var(--ease); }
+}
 
 /* ---------- narrow screens: stage on top, people below, dock pinned to the bottom ---------- */
 @media (max-width: 820px) {
@@ -1112,12 +1206,38 @@ option { background: var(--panel); color: var(--fg); }
       <button type="button" class="mic-btn" id="muteBtn"></button>
       <button type="button" class="tool" id="camBtn" aria-pressed="false"></button>
       <button type="button" class="tool" id="screenBtn" aria-pressed="false"></button>
+      <button type="button" class="tool" id="roomChatBtn" aria-expanded="false" aria-controls="chatPanel"></button>
       <button type="button" class="tool" id="chatBtn" hidden></button>
       <button type="button" class="tool" id="setBtn" aria-expanded="false" aria-controls="settings"></button>
       <button type="button" class="tool leave" id="leaveBtn"></button>
     </div>
     <p class="hint" id="keyHint"></p>
   </footer>
+
+  <aside id="chatPanel" class="chat" hidden aria-label="Чат канала">
+    <header class="chat-head">
+      <h2>Чат</h2>
+      <button type="button" class="icon-btn" id="chatMore" aria-label="Ещё" title="Ещё"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></button>
+      <button type="button" class="icon-btn" id="chatClose" aria-label="Закрыть чат" title="Закрыть чат"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="chat-old" id="chatOld" hidden></div>
+    <div class="chat-scroll">
+      <div class="chat-msgs" id="chatMsgs" aria-label="Сообщения"></div>
+      <button type="button" class="chat-jump" id="chatJump" hidden>Новые сообщения ↓</button>
+    </div>
+    <footer class="chat-compose">
+      <div class="chat-at" id="chatAt" hidden role="listbox" aria-label="Кого упомянуть"></div>
+      <div class="chat-ctx" id="chatCtx" hidden></div>
+      <div class="chat-row">
+        <button type="button" class="icon-btn" id="chatAttach" aria-label="Прикрепить картинку" title="Прикрепить картинку (или вставь её через Ctrl+V)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg></button>
+        <textarea id="chatText" rows="1" maxlength="2000" placeholder="Написать в канал…" aria-label="Сообщение"></textarea>
+        <button type="button" class="btn btn-primary chat-send" id="chatSend" aria-label="Отправить" title="Отправить (Enter)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
+      </div>
+      <div class="chat-why" id="chatWhy" hidden></div>
+      <div class="chat-note" id="chatNote" hidden></div>
+      <input type="file" id="chatFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+    </footer>
+  </aside>
 
   <aside id="settings" class="drawer" hidden aria-label="Настройки">
     <div class="drawer-head">
@@ -1329,6 +1449,16 @@ option { background: var(--panel); color: var(--fg); }
   </div>
 </div>
 
+<div id="chatLight" class="modal cm-light" hidden role="dialog" aria-modal="true" aria-label="Картинка из чата">
+  <div class="cm-light-box">
+    <img id="chatLightImg" alt="">
+    <div class="cm-light-bar">
+      <a class="btn small" id="chatLightSave" href="#" download>Сохранить</a>
+      <button type="button" class="btn small" id="chatLightClose">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden role="alert">
   <div class="t"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg><span id="toastText"></span></div>
   <div class="row">
@@ -1368,6 +1498,13 @@ const EYE = ico('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><ci
 const DOTS = ico('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>', 18);
 const CHECK = ico('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 16);
 const VOLICON = ico('<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>', 16);
+const CHATICO = ico('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12.5h5"/>');
+const I_SMILE = ico('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>', 16);
+const I_REPLY = ico('<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v5"/>', 16);
+const I_EDIT = ico('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 16);
+const I_COPY = ico('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 16);
+const I_TRASH = ico('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', 16);
+const I_X = ico('<path d="M6 6l12 12M18 6L6 18"/>', 14);
 
 // ---------- storage & settings ----------
 function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -1443,6 +1580,17 @@ const vids = new Map();    // "id:kind" -> {id, kind, stream, fig, video, cap, l
 const cards = new Map();   // id -> "watch stream" card element
 const tiles = new Map();   // id -> <li>
 const levels = new Map();  // id -> current speaking level (for camera tiles)
+// Chat in the channel (see "chat in the channel" below).
+const chat = {
+  code: '', msgs: [], byId: new Map(),   // messages sorted by time; id -> message
+  open: false, atBottom: true, unread: 0, mention: false,
+  reply: null, editing: null, pendingImg: null, at: null,
+  asked: new Set(),     // friends I already swapped histories with
+  rate: new Map(),      // peer id -> recent message times (anti-spam)
+  sent: [],             // my own recent message times
+  imgs: [],             // pictures held in memory, oldest first
+  saveTimer: 0, renderQueued: false, lastSound: 0, noteTimer: 0
+};
 
 // ---------- helpers ----------
 function normCode(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12); }
@@ -1547,10 +1695,11 @@ function syncHotkeys() {
 // Owner = whoever has been in the channel the longest. They set bitrate and can mute, kick and ban.
 // Every client enforces the owner's rules for everyone (mutes them locally, stops sending to the banned).
 const MY_UID = load('racia-uid') || (() => { const u = genCode() + genCode() + genCode(); save('racia-uid', u); return u; })();
-const RS_KEYS = ['mute', 'noStream', 'noSound', 'ban'];
+// noChat is new in version 17: an older owner drops it from the rules they pass on.
+const RS_KEYS = ['mute', 'noStream', 'noSound', 'noChat', 'ban'];
 const VOICE_RATES = [0, 24, 48, 96, 128];
 const STREAM_RATES = [0, 1500, 3000, 6000, 10000];
-function blankRules() { return { voice: 0, stream: 0, mute: [], noStream: [], noSound: [], ban: [], names: {} }; }
+function blankRules() { return { voice: 0, stream: 0, mute: [], noStream: [], noSound: [], noChat: [], ban: [], names: {} }; }
 st.rs = blankRules();
 function cleanRules(d) {
   const r = blankRules();
@@ -1571,7 +1720,7 @@ function uidOf(id) {
   return m.uid || '';
 }
 // Restrictions set by the app's administrators (stored in the account, so they can't be dodged).
-const ADMIN_KEY = { mute: 'voice', noStream: 'stream', noSound: 'sound', ban: 'banned' };
+const ADMIN_KEY = { mute: 'voice', noStream: 'stream', noSound: 'sound', noChat: 'dm', ban: 'banned' };
 function accMod(id) {
   const a = id === st.myId ? st.acc : (members.get(id) || {}).account;
   if (!a || (id !== st.myId && !a.verified)) return {};
@@ -1747,7 +1896,7 @@ function sendInfo(target) {
   const payload = {
     name: st.name, muted: !isSending(), ptt: settings.mode === 'ptt',
     testing: st.testing, cam: !!st.cam, screen: !!st.screen, viewers: st.watchers.size,
-    v: 8, uid: MY_UID, since: st.joinedAt, status: myStatus(), acc: st.acc ? st.acc.uid : ''
+    v: 9, chat: 1, uid: MY_UID, since: st.joinedAt, status: myStatus(), acc: st.acc ? st.acc.uid : ''
   };
   st.sentStatus = payload.status;
   try { quiet(st.info.send(payload, target ? { target } : undefined)); } catch (e) {}
@@ -1998,6 +2147,7 @@ function wireRoom(room) {
     if (room !== st.room) return;
     if (ctx && ctx.peerId && ctx.peerId === ownerId()) leave('kick');
   };
+  chatWire(room);
 
   room.onPeerJoin = (id) => {
     if (room !== st.room) return;
@@ -2016,6 +2166,7 @@ function wireRoom(room) {
     members.delete(id); dropRemote(id);
     st.net.delete(id); st.watchQ.delete(id);
     removeVideo(id, 'camera');
+    chat.asked.delete(id); chat.rate.delete(id);
     if (gone && gone.known && !gone.cut) chime(false);
     applyRules(); updateStatus();
     st.rsFrom.delete(id);
@@ -2044,6 +2195,9 @@ function wireRoom(room) {
     if (typeof data.uid === 'string' && /^[a-z0-9]{6,32}$/.test(data.uid)) m.uid = data.uid;
     if (typeof data.since === 'number' && data.since > 0) m.since = data.since;
     m.status = ['online', 'idle', 'dnd'].includes(data.status) ? data.status : 'online';
+    // Version 17+ has the chat; the first time we meet, we swap chat histories.
+    const hadChat = m.chat; m.chat = data.chat === 1;
+    if (m.chat && !hadChat) chatHello(id);
     const acc = typeof data.acc === 'string' && /^[A-Za-z0-9]{10,64}$/.test(data.acc) ? data.acc : '';
     if (acc !== (m.acc || '')) {
       m.acc = acc; m.account = null;
@@ -2689,6 +2843,11 @@ function updateTools() {
   sb.innerHTML = SCREEN + '<span>' + (st.screen ? 'В эфире' : 'Экран') + '</span>';
   sb.setAttribute('aria-pressed', String(!!st.screen)); sb.disabled = st.screenBusy;
   sb.title = st.screen ? 'Остановить стрим' : st.inCall && hasFlag('noStream', st.myId) ? 'Владелец комнаты запретил тебе стримить' : 'Показать экран';
+  const rb = $('#roomChatBtn');
+  rb.innerHTML = CHATICO + '<span>Чат</span>' + (chat.unread
+    ? '<span class="badge' + (chat.mention ? ' ment' : '') + '">' + (chat.mention ? '@' : chat.unread > 99 ? '99+' : chat.unread) + '</span>' : '');
+  rb.setAttribute('aria-expanded', String(chat.open));
+  rb.title = chat.open ? 'Закрыть чат' : 'Чат канала';
   gb.innerHTML = SLIDERS + '<span>Настройки</span>';
   gb.setAttribute('aria-expanded', String(!$('#settings').hidden));
   lb.innerHTML = LEAVE + '<span>Выйти</span>';
@@ -3047,6 +3206,7 @@ function enterCall() {
   if (web) { try { history.replaceState(null, '', '#' + st.code); } catch (e) {} }
   clearInterval(st.statusTimer);
   st.statusTimer = setInterval(updateStatus, 1000);
+  chatEnter();
   updateStatus(); updateTools(); updateSettingsUI(); updateStage();
   render(); syncHotkeys(); updateRoomUI(); refreshDevices(); applySink(); callEvent();
   if (APP) showUpdate(upd.s);
@@ -3059,6 +3219,7 @@ function leave(reason) {
   clearInterval(st.statusTimer);
   stopCam(false); stopScreen(false);
   for (const id of Array.from(st.watching.keys())) stopWatching(id, false);
+  chatLeave();
   const room = st.room; st.room = null; st.info = null; st.watchAct = null; st.roomAct = null; st.kickAct = null;
   st.forcedMute = false; st.rsFrom.clear(); st.net.clear();
   if (room) { try { quiet(room.leave()); } catch (e) {} }
@@ -3114,6 +3275,7 @@ function extras(m) {
   if (m.cam) x.push('камера');
   if (!m.me && hasFlag('noStream', m.id)) x.push('без стримов');
   if (!m.me && hasFlag('noSound', m.id)) x.push('стрим без звука');
+  if (!m.me && hasFlag('noChat', m.id)) x.push('без чата');
   return x.length ? ' · ' + x.join(', ') : '';
 }
 function render() {
@@ -3179,6 +3341,7 @@ function render() {
   });
   for (const [id, li] of tiles) if (!seen.has(id)) { li.remove(); tiles.delete(id); }
   $('#count').textContent = people.length + ' чел.';
+  chatPeople();
   for (const v of vids.values()) {
     const cn = v.cap.querySelector('.cn');
     if (v.kind === 'screen') cn.textContent = v.local ? 'Твой стрим · ' + viewersText(st.watchers.size) : nameOf(v.id);
@@ -3254,6 +3417,7 @@ function openMemberMenu(anchor, id) {
     popItem(p, 'Отключить голос', { checked: ownerFlag('mute', id), run: () => toggleRule('mute', id), close: false });
     popItem(p, 'Запретить стримить', { checked: ownerFlag('noStream', id), run: () => toggleRule('noStream', id), close: false });
     popItem(p, 'Стримы без звука', { checked: ownerFlag('noSound', id), run: () => toggleRule('noSound', id), close: false });
+    if (m.chat) popItem(p, 'Запретить писать в чат', { checked: ownerFlag('noChat', id), run: () => toggleRule('noChat', id), close: false });
     popSep(p);
     popItem(p, 'Выгнать из канала', { danger: true, run: () => kick(id) });
     popItem(p, 'Заблокировать в канале', { danger: true, run: () => { toggleRule('ban', id); flash(m.name + ' заблокирован в канале.'); } });
@@ -3282,6 +3446,693 @@ function openQualityMenu(anchor, id, mine) {
     p.appendChild(wrap);
   });
 }
+
+// ---------- chat in the channel ----------
+// Text chat right in the voice channel, like Discord. Messages go straight between friends over the
+// call's own connections (Trystero actions "chat" and "chatimg"), no server. When two friends meet in
+// a channel they swap their last 100 messages, so someone who comes in sees what was said; and every
+// computer keeps the last 200 messages of each channel it was in (localStorage), pictures excepted.
+// Older versions don't know these actions, and Trystero would pile such messages up in their memory
+// until they leave — so nothing is sent to them at all: a friend gets chat only after saying chat: 1
+// in "info". Authors are known by their computer id (MY_UID, the same "uid" that room rules use).
+const CHAT_MAX = 2000;                 // characters in a message
+const CHAT_KEEP = 200;                 // messages kept per channel on this computer
+const CHAT_GIVE = 100;                 // messages given to a friend we meet
+const CHAT_IMG_MAX = 4 * 1024 * 1024;  // bytes in a picture after shrinking
+const CHAT_IMG_LIVE = 40;              // pictures kept in memory; older ones show as "not available"
+const CHAT_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const CHAT_RX = [['like', '👍'], ['love', '❤️'], ['lol', '😂'], ['wow', '😮'], ['sad', '😢'], ['fire', '🔥']];
+const CHAT_ID = /^[a-z0-9]{8,16}$/;
+const chatTimeFmt = {};
+function hel(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'text') el.textContent = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const c of kids.flat(3)) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
+  return el;
+}
+function typingKey(vk) { return vk === 0x20 || (vk >= 0x30 && vk <= 0x5A) || (vk >= 0x60 && vk <= 0x6F) || (vk >= 0xBA && vk <= 0xE2); }
+function chatNewId() {
+  const b = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(b, (x) => ALPH[x % ALPH.length]).join('');
+}
+function chatFmt(kind) {
+  const lang = settings.lang === 'en' ? 'en-GB' : 'ru';
+  return chatTimeFmt[lang + kind] || (chatTimeFmt[lang + kind] = new Intl.DateTimeFormat(lang,
+    kind === 't' ? { hour: '2-digit', minute: '2-digit' } : kind === 'd' ? { day: 'numeric', month: 'long' }
+      : kind === 'y' ? { day: 'numeric', month: 'long', year: 'numeric' } : { dateStyle: 'long', timeStyle: 'short' }));
+}
+function chatDay(t) {
+  const d = new Date(t), n = new Date();
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(n) - start(d)) / 86400000);
+  if (diff === 0) return 'Сегодня';
+  if (diff === 1) return 'Вчера';
+  return chatFmt(d.getFullYear() === n.getFullYear() ? 'd' : 'y').format(d);
+}
+
+// --- what comes in from friends (and from disk) is checked before use ---
+function chatText(s) { return typeof s === 'string' ? s.replace(/\r\n?/g, '\n').slice(0, CHAT_MAX) : ''; }
+function chatAu(s) { return typeof s === 'string' && /^[A-Za-z0-9:_-]{1,64}$/.test(s) ? s : ''; }
+function chatCleanRe(r) {
+  if (!r || typeof r !== 'object' || !CHAT_ID.test(r.id)) return null;
+  return { id: r.id, au: chatAu(r.au), name: cleanName(r.name), text: chatText(r.text).slice(0, 140) };
+}
+function chatCleanImg(i) {
+  if (!i || typeof i !== 'object') return null;
+  const w = i.w | 0, h = i.h | 0;
+  if (w < 1 || h < 1 || w > 16384 || h > 16384) return null;
+  return { mime: CHAT_MIME.includes(i.mime) ? i.mime : '', w, h };
+}
+function chatCleanRx(rx) {
+  const out = {};
+  if (!rx || typeof rx !== 'object') return out;
+  for (const [k] of CHAT_RX) {
+    const who = rx[k];
+    if (!who || typeof who !== 'object') continue;
+    const o = {};
+    for (const a of Object.keys(who).slice(0, 50)) if (chatAu(a) && typeof who[a] === 'string') o[a] = cleanName(who[a]);
+    if (Object.keys(o).length) out[k] = o;
+  }
+  return out;
+}
+// A message as it goes into the history and onto disk: no picture, just its size.
+function chatPack(m) {
+  const o = { id: m.id, at: m.at, au: m.au, name: m.name, text: m.text };
+  if (m.re) o.re = m.re;
+  if (m.img) o.img = { w: m.img.w, h: m.img.h };
+  if (m.ed) o.ed = m.ed;
+  if (m.del) o.del = 1;
+  if (Object.keys(m.rx).length) o.rx = m.rx;
+  return o;
+}
+function chatUnpack(o) {
+  if (!o || typeof o !== 'object' || !CHAT_ID.test(o.id)) return null;
+  const at = Number(o.at);
+  if (!(at > 1.6e12 && at < Date.now() + 864e5)) return null;
+  const del = o.del === 1 || o.del === true;
+  const img = del ? null : chatCleanImg(o.img);
+  if (img) img.mime = ''; // the picture itself didn't come along
+  const text = del ? '' : chatText(o.text);
+  if (!del && !text.trim() && !img) return null;
+  return { id: o.id, at, au: chatAu(o.au), name: cleanName(o.name), text, re: del ? null : chatCleanRe(o.re), img,
+    ed: Number(o.ed) || 0, del, rx: del ? {} : chatCleanRx(o.rx) };
+}
+
+// --- who gets what ---
+function chatPeers() {
+  const out = [];
+  for (const m of members.values()) if (m.chat && !m.cut) out.push(m.id);
+  return out;
+}
+function chatSend(payload, target) {
+  if (!st.chatAct || (target && (members.get(target) || {}).cut)) return;
+  const to = target ? [target] : chatPeers();
+  if (!to.length) return;
+  try { quiet(st.chatAct.send(payload, { target: to })); } catch (e) {}
+}
+function chatWhy() {
+  if (!st.inCall) return '';
+  if (accMod(st.myId).dm === true) return 'Администратор Walkie-Talkie запретил тебе писать сообщения.';
+  if (ownerFlag('noChat', st.myId)) return 'Владелец комнаты запретил тебе писать в чат.';
+  return '';
+}
+function chatCanWrite() { return st.inCall && !chatWhy(); }
+// Anti-spam: 5 messages in 5 s and 40 other things (edits, reactions…) in 10 s per friend.
+function chatAllowed(id, kind) {
+  const now = Date.now();
+  let r = chat.rate.get(id);
+  if (!r) chat.rate.set(id, (r = { msg: [], other: [] }));
+  const list = r[kind], win = kind === 'msg' ? 5000 : 10000, max = kind === 'msg' ? 5 : 40;
+  while (list.length && now - list[0] > win) list.shift();
+  if (list.length >= max) return false;
+  list.push(now);
+  return true;
+}
+
+function chatWire(room) {
+  st.chatAct = room.makeAction('chat');
+  st.chatImgAct = room.makeAction('chatimg');
+  st.chatAct.onMessage = (data, ctx) => { if (room === st.room) chatReceive(data, ctx && ctx.peerId, null); };
+  st.chatImgAct.onMessage = (data, ctx) => { if (room === st.room) chatReceive(ctx && ctx.metadata, ctx && ctx.peerId, data); };
+}
+function chatReceive(d, id, bytes) {
+  if (!st.inCall || !d || typeof d !== 'object' || !id) return;
+  const m = members.get(id);
+  if (!m || !m.uid || m.cut) return;
+  if (d.t === 'hreq') { if (chatAllowed(id, 'other')) chatSend({ t: 'hist', msgs: chat.msgs.filter((x) => !x.sending).slice(-CHAT_GIVE).map(chatPack) }, id); return; }
+  if (d.t === 'hist') { if (chatAllowed(id, 'other')) chatMerge(d.msgs); return; }
+  if (hasFlag('noChat', id)) return;
+  if (d.t === 'msg') {
+    if (!chatAllowed(id, 'msg') || !CHAT_ID.test(d.id) || chat.byId.has(d.id)) return;
+    const text = chatText(d.text);
+    let img = null;
+    if (bytes) {
+      img = chatCleanImg(d.img);
+      const size = bytes.byteLength || 0;
+      if (!img || !img.mime || !size || size > CHAT_IMG_MAX + 65536) return;
+      img.url = URL.createObjectURL(new Blob([bytes], { type: img.mime }));
+    } else if (!text.trim()) return;
+    // Live messages take this computer's clock: friends' clocks may be off.
+    chatAdd({ id: d.id, at: Date.now(), au: m.uid, name: nameOf(id), text, re: chatCleanRe(d.re), img, ed: 0, del: false, rx: {} }, true);
+    return;
+  }
+  if (!chatAllowed(id, 'other')) return;
+  const msg = CHAT_ID.test(d.id) ? chat.byId.get(d.id) : null;
+  if (!msg || msg.del) return;
+  if (d.t === 'edit' && msg.au === m.uid) {
+    const t = chatText(d.text);
+    if (!t.trim() && !msg.img) return;
+    msg.text = t; msg.ed = Date.now(); chatChanged();
+  } else if (d.t === 'del' && (msg.au === m.uid || id === ownerId())) chatDelete(msg);
+  else if (d.t === 'rx') chatReact(msg, d.k, m.uid, nameOf(id), !!d.on);
+}
+
+// --- the list of messages ---
+function chatAdd(msg, live) {
+  chat.byId.set(msg.id, msg);
+  let i = chat.msgs.length;
+  while (i > 0 && chat.msgs[i - 1].at > msg.at) i--;
+  chat.msgs.splice(i, 0, msg);
+  if (msg.img && msg.img.url) chatHoldImg(msg);
+  while (chat.msgs.length > 2 * CHAT_KEEP) { const old = chat.msgs.shift(); chat.byId.delete(old.id); chatDropImg(old); }
+  if (live) chatNotify(msg);
+  chatChanged();
+}
+function chatMerge(list) {
+  if (!Array.isArray(list)) return;
+  let changed = false;
+  for (const raw of list.slice(-CHAT_KEEP)) {
+    const n = chatUnpack(raw);
+    if (!n) continue;
+    const cur = chat.byId.get(n.id);
+    if (!cur) { chatAdd(n, false); continue; }
+    if (cur.del) continue;
+    if (n.del) { chatDelete(cur); continue; }
+    if (n.ed > cur.ed) { cur.text = n.text; cur.ed = n.ed; changed = true; }
+    if (!Object.keys(cur.rx).length && Object.keys(n.rx).length) { cur.rx = n.rx; changed = true; }
+  }
+  if (changed) chatChanged();
+}
+function chatDelete(m) {
+  m.del = true; m.text = ''; m.rx = {}; m.re = null;
+  chatDropImg(m); m.img = null;
+  if (chat.editing === m.id) { chat.editing = null; $('#chatText').value = ''; chatCtx(); }
+  if (chat.reply && chat.reply.id === m.id) { chat.reply = null; chatCtx(); }
+  chatChanged();
+}
+function chatReact(m, k, au, name, on) {
+  if (m.del || !CHAT_RX.some(([x]) => x === k)) return;
+  const who = m.rx[k] || (m.rx[k] = {});
+  if (on) who[au] = cleanName(name); else delete who[au];
+  if (!Object.keys(who).length) delete m.rx[k];
+  chatChanged();
+}
+// Pictures live in memory only (as blob: links); past CHAT_IMG_LIVE the oldest become "not available".
+function chatHoldImg(m) {
+  chat.imgs.push(m);
+  while (chat.imgs.length > CHAT_IMG_LIVE) { const old = chat.imgs.shift(); if (old.img && old.img.url) { URL.revokeObjectURL(old.img.url); delete old.img.url; } }
+}
+function chatDropImg(m) {
+  if (m.img && m.img.url) URL.revokeObjectURL(m.img.url);
+  if (m.img) delete m.img.url;
+  const i = chat.imgs.indexOf(m); if (i >= 0) chat.imgs.splice(i, 1);
+}
+
+// --- my name in a message, or a reply to my message: a mention ---
+function chatEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function chatMentions(text, name) {
+  return !!name && new RegExp('(^|\\s)@' + chatEsc(name) + '(?![\\p{L}\\p{N}])', 'iu').test(text || '');
+}
+function chatNotify(m) {
+  m.ment = (m.re && m.re.au === MY_UID) || chatMentions(m.text, st.name);
+  const seen = chat.open && document.hasFocus() && chat.atBottom;
+  if (!seen) {
+    chat.unread++;
+    if (m.ment) chat.mention = true;
+    updateTools();
+    $('#chatJump').hidden = !chat.open || chat.atBottom;
+  }
+  if (!document.hasFocus() && APP) APP.flash();
+  if (seen || myStatus() === 'dnd') return;
+  const now = Date.now();
+  if (m.ment) { tone(988, 0.08, 0); tone(1319, 0.14, 0.08); chat.lastSound = now; }
+  else if (now - chat.lastSound > 4000) { tone(880, 0.08, 0); chat.lastSound = now; }
+}
+function chatRead() {
+  if (!chat.open || !document.hasFocus() || !chat.atBottom) return;
+  if (chat.unread || chat.mention) { chat.unread = 0; chat.mention = false; updateTools(); }
+  $('#chatJump').hidden = true;
+}
+
+// --- drawing ---
+function chatChanged() {
+  chatSaveSoon();
+  if (chat.renderQueued) return;
+  chat.renderQueued = true;
+  requestAnimationFrame(() => { chat.renderQueued = false; chatRender(); });
+}
+function chatNames() {
+  const names = new Set();
+  if (st.name) names.add(st.name);
+  for (const m of members.values()) if (m.known && !m.cut) names.add(nameOf(m.id));
+  for (const m of chat.msgs) names.add(m.name);
+  return Array.from(names).filter((n) => n && n !== 'Без имени').sort((a, b) => b.length - a.length);
+}
+function chatRich(text, names) {
+  const out = [];
+  const url = 'racia:\\/\\/[A-Za-z0-9/_-]+|https?:\\/\\/[^\\s<>"]*[^\\s<>".,!?;:)\\]]';
+  const re = new RegExp(url + (names.length ? '|(?<=^|\\s)@(?:' + names.map(chatEsc).join('|') + ')(?![\\p{L}\\p{N}])' : ''), 'giu');
+  let last = 0, mm;
+  while ((mm = re.exec(text))) {
+    const s = mm[0];
+    if (mm.index > last) out.push(text.slice(last, mm.index));
+    if (s[0] === '@') out.push(hel('span', { class: 'cm-at' + (chatMentions(s, st.name) ? ' me' : ''), text: s }));
+    else if (/^racia:/i.test(s)) {
+      const j = /^racia:\/\/join\/([A-Za-z0-9]{3,12})$/i.exec(s);
+      out.push(j ? hel('a', { href: '#', class: 'cm-link', onclick: (e) => { e.preventDefault(); window.RaciaCall.join(j[1]); } }, 'Зайти в канал ' + j[1].toUpperCase()) : s);
+    } else out.push(hel('a', { href: s, target: '_blank', rel: 'noopener noreferrer', class: 'cm-link', text: s }));
+    last = mm.index + s.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function chatAvatar(m) {
+  let acc = null;
+  if (m.au === MY_UID) acc = st.acc;
+  else for (const x of members.values()) if (x.uid === m.au && x.account && x.account.verified) { acc = x.account; break; }
+  return hel('span', { class: 'cm-av', 'aria-hidden': 'true' },
+    acc && acc.avatar ? hel('img', { src: acc.avatar, alt: '' }) : hel('span', { translate: 'no', text: (m.name || '?').charAt(0).toUpperCase() }));
+}
+function chatImgEl(img) {
+  const k = Math.min(1, 300 / img.w, 240 / img.h);
+  const w = Math.max(48, Math.round(img.w * k)), h = Math.max(36, Math.round(img.h * k));
+  if (!img.url) return hel('div', { class: 'cm-img gone', style: 'width:' + Math.min(w, 220) + 'px;height:' + Math.min(h, 64) + 'px' }, hel('span', { text: 'Картинка недоступна' }));
+  return hel('button', { type: 'button', class: 'cm-img', title: 'Открыть картинку', onclick: () => chatLightOpen(img) },
+    hel('img', { src: img.url, alt: 'Картинка', width: w, height: h, style: 'width:' + w + 'px;height:' + h + 'px' }));
+}
+function chatBar(m) {
+  const mine = m.au === MY_UID, can = chatCanWrite();
+  const bar = hel('div', { class: 'cm-bar' });
+  const act = (icon, title, fn) => { const b = hel('button', { type: 'button', 'aria-label': title, title, html: icon }); b.addEventListener('click', () => fn(b)); bar.append(b); };
+  if (can) {
+    act(I_SMILE, 'Реакция', (b) => openPop(b, 'rx:' + m.id, (p) => {
+      p.append(hel('div', { class: 'cm-rxpick' }, CHAT_RX.map(([k, e]) => hel('button', { type: 'button', text: e, onclick: () => { closePop(); chatToggleRx(m, k); } }))));
+    }));
+    act(I_REPLY, 'Ответить', () => chatStartReply(m));
+    if (mine) act(I_EDIT, 'Изменить', () => chatStartEdit(m));
+  }
+  if (m.text) act(I_COPY, 'Скопировать текст', () => { try { quiet(navigator.clipboard.writeText(m.text)); chatNote('Текст скопирован'); } catch (e) {} });
+  if (mine || amOwner()) act(I_TRASH, 'Удалить', (b) => openPop(b, 'del:' + m.id, (p) => {
+    popItem(p, mine ? 'Удалить сообщение' : 'Удалить сообщение у всех', { danger: true, run: () => { chatDelete(m); chatSend({ t: 'del', id: m.id }); } });
+  }));
+  return bar;
+}
+function chatMsgEl(m, grouped, names) {
+  const el = hel('div', { class: 'cm-msg' + (grouped ? ' grouped' : '') + (m.ment && !m.del ? ' ment' : ''), 'data-id': m.id });
+  el.append(grouped ? hel('span', { class: 'cm-side-time', text: chatFmt('t').format(m.at) }) : chatAvatar(m));
+  const c = hel('div', { class: 'cm-c' });
+  if (!grouped) c.append(hel('div', { class: 'cm-h' }, hel('b', { translate: 'no', text: m.name }),
+    hel('span', { class: 's', title: chatFmt('f').format(m.at), text: m.sending ? 'отправляется…' : chatFmt('t').format(m.at) })));
+  if (m.del) c.append(hel('div', { class: 'cm-t deleted', text: 'Сообщение удалено' }));
+  else {
+    if (m.re) c.append(hel('button', { type: 'button', class: 'cm-re', title: 'Показать сообщение', onclick: () => chatJumpTo(m.re.id) },
+      hel('span', { html: I_REPLY }), hel('b', { translate: 'no', text: m.re.name }),
+      m.re.text ? hel('span', { translate: 'no', text: m.re.text }) : hel('span', { text: 'Картинка' })));
+    if (m.text) c.append(hel('div', { class: 'cm-t' }, hel('span', { translate: 'no' }, chatRich(m.text, names)), m.ed ? hel('span', { class: 'cm-ed', title: chatFmt('f').format(m.ed), text: ' (изменено)' }) : null));
+    if (m.img) c.append(chatImgEl(m.img));
+    if (m.failed) c.append(hel('div', { class: 'cm-fail', text: 'Не отправилось' }));
+    const chips = CHAT_RX.filter(([k]) => m.rx[k]).map(([k, e]) => {
+      const who = m.rx[k];
+      return hel('button', { type: 'button', class: 'cm-rx' + (who[MY_UID] ? ' on' : ''), title: Object.values(who).join(', '), translate: 'no', disabled: !chatCanWrite(),
+        onclick: () => chatToggleRx(m, k) }, e + ' ' + Object.keys(who).length);
+    });
+    if (chips.length) c.append(hel('div', { class: 'cm-rxs' }, chips));
+  }
+  el.append(c);
+  if (!m.del && !m.sending) el.append(chatBar(m));
+  return el;
+}
+function chatRender() {
+  const box = $('#chatMsgs');
+  if (!chat.open) return; // drawn when opened
+  const stick = chat.atBottom, top = box.scrollTop;
+  box.textContent = '';
+  if (!chat.msgs.length) {
+    box.append(hel('div', { class: 'cm-empty' }, hel('div', { class: 'big', text: 'Здесь пока тихо' }),
+      hel('div', { text: 'Напиши первым — сообщение увидят все, кто в канале. Картинку можно вставить через Ctrl+V.' })));
+  }
+  const names = chatNames();
+  let prevDay = '', prev = null;
+  for (const m of chat.msgs) {
+    const day = chatDay(m.at);
+    if (day !== prevDay) { box.append(hel('div', { class: 'cm-day' }, hel('span', { text: day }))); prevDay = day; prev = null; }
+    const grouped = !!prev && !prev.del && prev.au === m.au && !m.re && m.at - prev.at < 5 * 60000;
+    box.append(chatMsgEl(m, grouped, names));
+    prev = m;
+  }
+  box.scrollTop = stick ? box.scrollHeight : top;
+}
+function chatJumpTo(id) {
+  const el = $('#chatMsgs').querySelector('[data-id="' + id + '"]');
+  if (!el) { chatNote('Этого сообщения уже нет в истории'); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.remove('lit'); void el.offsetWidth; el.classList.add('lit');
+}
+
+// --- the panel ---
+function chatShow(open) {
+  chat.open = !!open;
+  $('#chatPanel').hidden = !open;
+  $('#callView').classList.toggle('chat-open', chat.open);
+  if (open) {
+    if (!$('#settings').hidden) setDrawer(false);
+    chat.atBottom = true;
+    chatRender(); chatPeople(); chatRead();
+    $('#chatText').focus({ preventScroll: true });
+  } else {
+    chatAtHide();
+    if ($('#chatPanel').contains(document.activeElement)) $('#callView').focus({ preventScroll: true });
+  }
+  updateTools();
+}
+function chatPeople() {
+  if (!st.inCall) return;
+  const old = [];
+  for (const m of members.values()) if (m.known && !m.cut && !m.chat) old.push(nameOf(m.id));
+  const t = old.length ? 'Не видят чат — старая версия: ' + old.join(', ') : '';
+  const el = $('#chatOld');
+  if (el.dataset.t !== t) { el.dataset.t = t; el.textContent = t; el.hidden = !t; }
+  const why = chatWhy(), w = $('#chatWhy');
+  if (w.dataset.t !== why) {
+    w.dataset.t = why; w.textContent = why; w.hidden = !why;
+    $('#chatText').disabled = !!why; $('#chatSend').disabled = !!why; $('#chatAttach').disabled = !!why;
+    if (why) { chat.editing = null; chat.reply = null; chatClearImg(); chatCtx(); }
+    chatChanged();
+  }
+}
+function chatNote(text) {
+  const n = $('#chatNote');
+  n.textContent = text; n.hidden = !text;
+  clearTimeout(chat.noteTimer);
+  if (text) chat.noteTimer = setTimeout(() => { n.hidden = true; }, 4000);
+}
+function chatAutosize() {
+  const ta = $('#chatText');
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(160, ta.scrollHeight + 2) + 'px';
+}
+// Above the text box: "editing", "reply to …", the picture about to be sent.
+function chatCtx() {
+  const box = $('#chatCtx');
+  box.textContent = '';
+  const row = (kids, cancel) => hel('div', { class: 'cm-ctx' }, kids, hel('button', { type: 'button', class: 'x', 'aria-label': 'Отменить', title: 'Отменить', html: I_X, onclick: cancel }));
+  if (chat.editing) box.append(row([hel('span', { html: I_EDIT }), hel('span', { class: 's', text: 'Редактирование сообщения · Esc — отмена' })],
+    () => { chat.editing = null; $('#chatText').value = ''; chatAutosize(); chatCtx(); }));
+  if (chat.reply) box.append(row([hel('span', { html: I_REPLY }), hel('span', { text: 'Ответ для' }), hel('b', { translate: 'no', text: chat.reply.name }),
+    chat.reply.text ? hel('span', { class: 's', translate: 'no', text: chat.reply.text }) : hel('span', { class: 's', text: 'Картинка' })],
+    () => { chat.reply = null; chatCtx(); }));
+  const p = chat.pendingImg;
+  if (p) box.append(row([hel('img', { src: p.url, alt: '' }), hel('span', { class: 's', text: 'Картинка · ' + Math.max(1, Math.round(p.blob.size / 1024)) + ' КБ' })],
+    () => { chatClearImg(); chatCtx(); }));
+  box.hidden = !box.childNodes.length;
+}
+function chatStartReply(m) {
+  chat.editing = null;
+  chat.reply = { id: m.id, au: m.au, name: m.name, text: (m.text || '').replace(/\s+/g, ' ').slice(0, 140) };
+  chatCtx(); $('#chatText').focus();
+}
+function chatStartEdit(m) {
+  if (m.au !== MY_UID || m.del) return;
+  chat.editing = m.id; chat.reply = null; chatClearImg();
+  const ta = $('#chatText');
+  ta.value = m.text; chatCtx(); chatAutosize();
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function chatToggleRx(m, k) {
+  if (!chatCanWrite() || m.del) return;
+  const on = !(m.rx[k] && m.rx[k][MY_UID]);
+  chatReact(m, k, MY_UID, st.name, on);
+  chatSend({ t: 'rx', id: m.id, k, on });
+}
+function chatClearImg() {
+  if (chat.pendingImg && !chat.pendingImg.sent) URL.revokeObjectURL(chat.pendingImg.url);
+  chat.pendingImg = null;
+}
+
+// --- sending ---
+async function chatSubmit() {
+  const ta = $('#chatText');
+  if (!chatCanWrite()) return;
+  const text = ta.value.replace(/\r\n?/g, '\n').trim().slice(0, CHAT_MAX);
+  if (chat.editing) {
+    const m = chat.byId.get(chat.editing);
+    chat.editing = null; ta.value = ''; chatAutosize(); chatCtx();
+    if (!m || m.del || m.au !== MY_UID || text === m.text) return;
+    if (!text && !m.img) { chatDelete(m); chatSend({ t: 'del', id: m.id }); return; }
+    m.text = text; m.ed = Date.now(); chatChanged();
+    chatSend({ t: 'edit', id: m.id, text });
+    return;
+  }
+  const pic = chat.pendingImg;
+  if (!text && !pic) return;
+  const now = Date.now();
+  chat.sent = chat.sent.filter((t) => now - t < 5000);
+  if (chat.sent.length >= 5) { chatNote('Не так быстро — подожди пару секунд.'); return; }
+  chat.sent.push(now);
+  const msg = { id: chatNewId(), at: now, au: MY_UID, name: st.name, text, re: chat.reply, img: null, ed: 0, del: false, rx: {} };
+  const wire = { t: 'msg', id: msg.id, text };
+  if (msg.re) wire.re = msg.re;
+  ta.value = ''; chatAutosize(); chat.reply = null; chat.pendingImg = null; chatCtx(); chatAtHide();
+  chat.atBottom = true;
+  if (!pic) { chatAdd(msg, false); chatSend(wire); return; }
+  pic.sent = true;
+  msg.img = { mime: pic.mime, w: pic.w, h: pic.h, url: pic.url };
+  msg.sending = true;
+  chatAdd(msg, false);
+  const to = chatPeers();
+  try {
+    if (to.length && st.chatImgAct) {
+      const bytes = new Uint8Array(await pic.blob.arrayBuffer());
+      await st.chatImgAct.send(bytes, { target: to, metadata: Object.assign(wire, { img: { mime: pic.mime, w: pic.w, h: pic.h } }) });
+    }
+  } catch (e) { msg.failed = true; }
+  msg.sending = false; chatChanged();
+}
+// Pictures are shrunk to 1920 px on the long side and sent as WebP; a GIF up to 4 MB goes as it is (it moves).
+async function chatPrepImage(file) {
+  if (!file || !/^image\//.test(file.type)) throw new Error('type');
+  if (file.size > 50 * 1024 * 1024) throw new Error('big');
+  const bmp = await createImageBitmap(file);
+  try {
+    const w0 = bmp.width, h0 = bmp.height;
+    if (file.type === 'image/gif' && file.size <= CHAT_IMG_MAX) return { blob: file, mime: 'image/gif', w: w0, h: h0 };
+    for (const [side, q] of [[1920, 0.86], [1600, 0.8], [1280, 0.72]]) {
+      const k = Math.min(1, side / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', q));
+      if (blob && blob.size <= CHAT_IMG_MAX) return { blob, mime: 'image/webp', w, h };
+    }
+    throw new Error('big');
+  } finally { bmp.close(); }
+}
+async function chatPickImage(file) {
+  if (!chatCanWrite()) return;
+  try {
+    const p = await chatPrepImage(file);
+    p.url = URL.createObjectURL(p.blob);
+    chatClearImg();
+    chat.pendingImg = p; chat.editing = null;
+    chatCtx(); $('#chatText').focus();
+  } catch (e) {
+    chatNote(e && e.message === 'big' ? 'Картинка слишком большая.' : 'Это не картинка, или её не получилось открыть.');
+  }
+}
+
+// --- @mentions: a list of people pops up while typing @… ---
+function chatAtUpdate() {
+  const ta = $('#chatText');
+  const pos = ta.selectionStart;
+  const mm = pos === ta.selectionEnd ? /(?:^|\s)@([^\s@]{0,24})$/.exec(ta.value.slice(0, pos)) : null;
+  if (!mm) { chatAtHide(); return; }
+  const q = mm[1].toLowerCase();
+  const names = [];
+  for (const m of members.values()) {
+    if (!m.known || m.cut) continue;
+    const n = nameOf(m.id);
+    if (!names.includes(n) && n.toLowerCase().startsWith(q)) names.push(n);
+  }
+  if (!names.length) { chatAtHide(); return; }
+  chat.at = { start: pos - mm[1].length - 1, names: names.slice(0, 8), sel: chat.at ? Math.min(chat.at.sel, names.length - 1) : 0 };
+  chatAtDraw();
+}
+function chatAtDraw() {
+  const box = $('#chatAt'), a = chat.at;
+  box.textContent = '';
+  a.names.forEach((n, i) => box.append(hel('button', { type: 'button', role: 'option', 'aria-selected': String(i === a.sel), translate: 'no', text: '@' + n,
+    onmousedown: (e) => e.preventDefault(), onclick: () => chatAtPick(i) })));
+  box.hidden = false;
+}
+function chatAtPick(i) {
+  const a = chat.at, ta = $('#chatText');
+  if (!a) return;
+  const name = a.names[i], pos = ta.selectionStart;
+  ta.value = ta.value.slice(0, a.start) + '@' + name + ' ' + ta.value.slice(pos);
+  const c = a.start + name.length + 2;
+  ta.setSelectionRange(c, c);
+  chatAtHide(); chatAutosize(); ta.focus();
+}
+function chatAtHide() { chat.at = null; $('#chatAt').hidden = true; }
+function chatAtKey(e) {
+  const a = chat.at;
+  if (!a) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    a.sel = (a.sel + (e.key === 'ArrowDown' ? 1 : a.names.length - 1)) % a.names.length;
+    chatAtDraw();
+  } else if (e.key === 'Enter' || e.key === 'Tab') chatAtPick(a.sel);
+  else if (e.key === 'Escape') chatAtHide();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+
+// --- picture viewer ---
+function chatLightOpen(img) {
+  if (!img.url) return;
+  $('#chatLightImg').src = img.url;
+  const a = $('#chatLightSave');
+  a.href = img.url;
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  a.download = 'walkie-talkie-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) +
+    '.' + ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif' }[img.mime] || 'webp');
+  $('#chatLight').hidden = false;
+  $('#chatLightClose').focus({ preventScroll: true });
+}
+function chatLightClose() {
+  $('#chatLight').hidden = true;
+  $('#chatLightImg').removeAttribute('src');
+  if (chat.open) $('#chatText').focus({ preventScroll: true });
+}
+
+// --- this computer's copy of the channel's chat ---
+function chatKey(code) { return 'racia-chat-' + code; }
+function chatSaveSoon() { clearTimeout(chat.saveTimer); chat.saveTimer = setTimeout(chatSave, 1500); }
+function chatSave() {
+  clearTimeout(chat.saveTimer);
+  if (!chat.code) return;
+  const list = chat.msgs.filter((m) => !m.sending).slice(-CHAT_KEEP).map(chatPack);
+  let idx = [];
+  try { idx = JSON.parse(load('racia-chat-index') || '[]'); } catch (e) {}
+  if (!Array.isArray(idx)) idx = [];
+  idx = idx.filter((c) => typeof c === 'string' && c !== chat.code);
+  if (list.length) { save(chatKey(chat.code), JSON.stringify(list)); idx.unshift(chat.code); }
+  else { try { localStorage.removeItem(chatKey(chat.code)); } catch (e) {} }
+  // the 30 channels used last keep their history
+  for (const c of idx.splice(30)) { try { localStorage.removeItem(chatKey(c)); } catch (e) {} }
+  save('racia-chat-index', JSON.stringify(idx));
+}
+function chatEnter() {
+  chat.code = st.code;
+  chat.msgs = []; chat.byId.clear(); chat.imgs = [];
+  chat.asked.clear(); chat.rate.clear(); chat.sent = [];
+  chat.unread = 0; chat.mention = false; chat.reply = null; chat.editing = null; chat.atBottom = true;
+  chatClearImg();
+  let list = [];
+  try { list = JSON.parse(load(chatKey(chat.code)) || '[]'); } catch (e) {}
+  if (Array.isArray(list)) for (const raw of list) { const n = chatUnpack(raw); if (n && !chat.byId.has(n.id)) { chat.byId.set(n.id, n); chat.msgs.push(n); } }
+  chat.msgs.sort((a, b) => a.at - b.at);
+  $('#chatText').value = ''; chatAutosize(); chatCtx(); chatNote('');
+  $('#chatOld').dataset.t = '-'; $('#chatWhy').dataset.t = '-';
+  if (chat.open) chatRender();
+}
+function chatLeave() {
+  chatSave();
+  chatShow(false); chatLightClose();
+  for (const m of chat.msgs) chatDropImg(m);
+  chatClearImg();
+  chat.code = ''; chat.msgs = []; chat.byId.clear(); chat.imgs = [];
+  chat.unread = 0; chat.mention = false;
+  st.chatAct = null; st.chatImgAct = null;
+}
+function chatHello(id) {
+  if (chat.asked.has(id)) return;
+  chat.asked.add(id);
+  chatSend({ t: 'hreq' }, id);
+}
+
+// --- wiring ---
+$('#roomChatBtn').addEventListener('click', () => chatShow(!chat.open));
+$('#chatClose').addEventListener('click', () => chatShow(false));
+$('#chatMore').addEventListener('click', (e) => openPop(e.currentTarget, 'chatmore', (p) => {
+  popHead(p, 'Чат этого канала');
+  popItem(p, 'Очистить историю на этом компьютере', { danger: true, run: () => {
+    for (const m of chat.msgs) chatDropImg(m);
+    chat.msgs = []; chat.byId.clear(); chat.unread = 0; chat.mention = false;
+    chatSave(); chatRender(); updateTools();
+    chatNote('История очищена у тебя. У друзей она осталась.');
+  } });
+}));
+$('#chatSend').addEventListener('click', () => { chatSubmit(); $('#chatText').focus(); });
+$('#chatAttach').addEventListener('click', () => $('#chatFile').click());
+$('#chatFile').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) chatPickImage(f); });
+$('#chatJump').addEventListener('click', () => { const b = $('#chatMsgs'); b.scrollTop = b.scrollHeight; });
+$('#chatMsgs').addEventListener('scroll', () => {
+  const b = $('#chatMsgs');
+  chat.atBottom = b.scrollHeight - b.scrollTop - b.clientHeight < 48;
+  if (chat.atBottom) chatRead();
+}, { passive: true });
+window.addEventListener('focus', chatRead);
+const chatTa = $('#chatText');
+chatTa.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.isComposing) return;
+  if (chatAtKey(e)) return;
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSubmit(); return; }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (chat.editing) { chat.editing = null; chatTa.value = ''; chatAutosize(); chatCtx(); }
+    else if (chat.reply || chat.pendingImg) { chat.reply = null; chatClearImg(); chatCtx(); }
+    else chatShow(false);
+    return;
+  }
+  // ↑ in an empty box: edit my last message
+  if (e.key === 'ArrowUp' && !chatTa.value && !chat.editing) {
+    for (let i = chat.msgs.length - 1; i >= 0; i--) {
+      const m = chat.msgs[i];
+      if (m.au === MY_UID && !m.del && !m.sending) { e.preventDefault(); chatStartEdit(m); break; }
+    }
+  }
+});
+chatTa.addEventListener('input', () => { chatAutosize(); chatAtUpdate(); });
+chatTa.addEventListener('click', chatAtUpdate);
+chatTa.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== chatTa) chatAtHide(); }, 150));
+chatTa.addEventListener('paste', (e) => {
+  const f = Array.from((e.clipboardData && e.clipboardData.files) || []).find((x) => /^image\//.test(x.type));
+  if (f) { e.preventDefault(); chatPickImage(f); }
+});
+const chatPanel = $('#chatPanel');
+chatPanel.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+  e.preventDefault(); chatPanel.classList.add('drop');
+});
+chatPanel.addEventListener('dragleave', (e) => { if (!chatPanel.contains(e.relatedTarget)) chatPanel.classList.remove('drop'); });
+chatPanel.addEventListener('drop', (e) => {
+  chatPanel.classList.remove('drop');
+  const f = Array.from((e.dataTransfer && e.dataTransfer.files) || []).find((x) => /^image\//.test(x.type));
+  if (!f) return;
+  e.preventDefault(); chatPickImage(f);
+});
+$('#chatLight').addEventListener('click', (e) => { if (e.target.id === 'chatLight') chatLightClose(); });
+$('#chatLightClose').addEventListener('click', chatLightClose);
+window.addEventListener('racia-prefs', () => { if (chat.open) chatRender(); });
 
 // ---------- connection: ping, losses, chart ----------
 // My packets lost on the way to a friend → my video to that friend gets cheaper. Checked every 2 s:
@@ -3503,6 +4354,7 @@ function isTyping(t) {
 window.addEventListener('keydown', (e) => {
   if (!$('#pop').hidden && e.code === 'Escape') { e.preventDefault(); closePop(); return; }
   if (!$('#picker').hidden && e.code === 'Escape') { e.preventDefault(); closePicker(null); return; }
+  if (!$('#chatLight').hidden && e.code === 'Escape') { e.preventDefault(); chatLightClose(); return; }
   if (st.binding && st.globalKeys) { e.preventDefault(); return; } // the helper catches the key
   if (st.binding) {
     e.preventDefault(); e.stopPropagation();
@@ -3518,6 +4370,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'Escape' && !$('#settings').hidden) { setDrawer(false); return; }
+  if (e.code === 'Escape' && chat.open) { chatShow(false); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (!st.globalKeys && settings.mode === 'voice' && e.code === 'KeyM') {
     e.preventDefault();
@@ -3584,6 +4437,8 @@ async function bindKey(which) {
 if (APP) {
   APP.onHotkey((name, down) => {
     if (!st.inCall || !st.globalKeys || st.binding) return;
+    // Typing in this window (chat, messages): a letter key must type, not talk. Releasing always goes through.
+    if (down && document.hasFocus() && isTyping(document.activeElement) && typingKey(name === 'ptt' ? settings.pttVk : settings.muteVk)) return;
     if (name === 'ptt' && settings.mode === 'ptt') setPtt(down);
     else if (name === 'mute' && down && settings.mode === 'voice' && !st.testing) toggleMute();
   });
@@ -3657,7 +4512,9 @@ window.RaciaCall = {
   setChatBadge(n, show) {
     const b = $('#chatBtn');
     b.hidden = !show;
-    b.innerHTML = ico('<path d="M4 5h16v11H8l-4 4z"/>') + '<span>Чаты</span>' + (n ? '<span class="badge">' + (n > 99 ? '99+' : n) + '</span>' : '');
+    // "Личные" (direct messages), so it isn't confused with the channel's own "Чат" next to it.
+    b.innerHTML = ico('<path d="M4 5h16v11H8l-4 4z"/>') + '<span>Личные</span>' + (n ? '<span class="badge">' + (n > 99 ? '99+' : n) + '</span>' : '');
+    b.title = 'Личные сообщения';
   }
 };
 $('#chatBtn').addEventListener('click', () => { if (window.RaciaSocial) window.RaciaSocial.open('chats'); });
@@ -3668,7 +4525,7 @@ if (APP) {
 }
 
 // For troubleshooting from the console (F12): window.__racia.st
-if (/[?&]debug\b/.test(location.search)) window.__racia = { st, settings, members, rms };
+if (/[?&]debug\b/.test(location.search)) window.__racia = { st, settings, members, rms, chat };
 </script>
 </body>
 </html>

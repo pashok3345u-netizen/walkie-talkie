@@ -212,7 +212,25 @@
     'Запретить личные сообщения': 'Ban from private messages',
     'Привет! Заполни профиль': 'Hi! Fill in your profile',
     'Имя и аватар видят друзья и люди в звонке. Тег — твой уникальный ник, по нему тебя ищут.': 'Friends and people in calls see your name and avatar. The tag is your unique nickname — people find you by it.',
-    'Готово': 'Done', 'Профиль создан': 'Profile created', 'Войди в аккаунт на главном экране Walkie-Talkie': 'Sign in on the Walkie-Talkie main screen'
+    'Готово': 'Done', 'Профиль создан': 'Profile created', 'Войди в аккаунт на главном экране Walkie-Talkie': 'Sign in on the Walkie-Talkie main screen',
+    // ---------- chat in the channel ----------
+    'Чат': 'Chat', 'Чат канала': 'Channel chat', 'Закрыть чат': 'Close chat', 'Личные': 'DMs', 'Личные сообщения': 'Direct messages',
+    'Сообщение': 'Message', 'Новые сообщения ↓': 'New messages ↓', 'Кого упомянуть': 'Mention someone',
+    'Прикрепить картинку': 'Attach a picture', 'Прикрепить картинку (или вставь её через Ctrl+V)': 'Attach a picture (or paste it with Ctrl+V)',
+    'Написать в канал…': 'Message the channel…', 'Отправить (Enter)': 'Send (Enter)', 'Картинка из чата': 'Picture from the chat',
+    'Администратор Walkie-Talkie запретил тебе писать сообщения.': 'A Walkie-Talkie administrator has banned you from writing messages.',
+    'Владелец комнаты запретил тебе писать в чат.': 'The room owner has banned you from the chat.',
+    'Картинка': 'Picture', 'Картинка недоступна': 'Picture not available', 'Открыть картинку': 'Open the picture',
+    'Ответить': 'Reply', 'Удалить сообщение у всех': 'Delete the message for everyone', 'Показать сообщение': 'Show the message',
+    'Здесь пока тихо': 'It’s quiet here',
+    'Напиши первым — сообщение увидят все, кто в канале. Картинку можно вставить через Ctrl+V.': 'Write first — everyone in the channel will see it. Paste a picture with Ctrl+V.',
+    'Этого сообщения уже нет в истории': 'That message is no longer in the history',
+    'Редактирование сообщения · Esc — отмена': 'Editing the message · Esc to cancel', 'Ответ для': 'Replying to',
+    'Не так быстро — подожди пару секунд.': 'Not so fast — wait a couple of seconds.',
+    'Картинка слишком большая.': 'The picture is too big.', 'Это не картинка, или её не получилось открыть.': 'That’s not a picture, or it couldn’t be opened.',
+    'Чат этого канала': 'This channel’s chat', 'Очистить историю на этом компьютере': 'Clear the history on this computer',
+    'История очищена у тебя. У друзей она осталась.': 'History cleared on your computer. Your friends still have it.',
+    'Запретить писать в чат': 'Ban from the chat', 'без чата': 'no chat'
   };
   const map = new Map(Object.entries(EN));
   const CYR = /[А-Яа-яЁё]/;
@@ -223,6 +241,8 @@
   const PAT = [
     [/^(\d+) (зритель|зрителя|зрителей)$/, (m) => plural(m[1], 'viewer', 'viewers')],
     [/^(\d+) чел\.$/, (m) => plural(m[1], 'person', 'people')],
+    [/^(\d+) КБ$/, (m) => m[1] + ' KB'],
+    [/^Не видят чат — старая версия: (.+)$/, (m) => 'Can’t see the chat (old version): ' + m[1]],
     [/^(\d+) мс$/, (m) => m[1] + ' ms'],
     [/^потери ([\d.]+)%$/, (m) => 'loss ' + m[1] + '%'],
     [/^джиттер (\d+) мс$/, (m) => 'jitter ' + m[1] + ' ms'],
