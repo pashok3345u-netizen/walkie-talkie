@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('racia', {
   googleLogin: (lang) => ipcRenderer.invoke('racia:google-login', lang === 'en' ? 'en' : 'ru'),
   cancelGoogleLogin: () => ipcRenderer.send('racia:google-cancel'),
   flash: () => ipcRenderer.send('racia:flash'),
+  notify: (n) => ipcRenderer.send('racia:notify', { tag: String((n && n.tag) || ''), title: String((n && n.title) || ''), body: String((n && n.body) || ''), icon: n && typeof n.icon === 'string' && n.icon.length < 300000 ? n.icon : '' }),
+  closeNotify: (tag) => ipcRenderer.send('racia:notify-close', String(tag || '')),
   pendingLink: () => ipcRenderer.invoke('racia:pending-link'),
   onLink: (fn) => { ipcRenderer.on('racia:link', (e, l) => fn(String(l))); }
 });

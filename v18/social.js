@@ -19,6 +19,17 @@
   const REACTIONS = [['like', '👍'], ['love', '❤️'], ['lol', '😂'], ['wow', '😮'], ['sad', '😢'], ['fire', '🔥']];
   const STATUS_TEXT = { online: 'в сети', idle: 'неактивен', dnd: 'не беспокоить', offline: 'не в сети' };
   const TAG_RE = /^[a-z0-9_]{3,20}$/;
+  // What this version can do, for friends' apps (live/<uid>.v): 18 — calls.
+  const LIVE_V = 18;
+  const RING_MS = 30000;
+  // Test copies only (tools/test-harness --fb=…): the local Firestore emulator and a made-up account
+  // instead of Google. Ignored unless the emulator is on this very computer.
+  const TEST = (() => {
+    try {
+      const t = JSON.parse(localStorage.getItem('racia-test-fb') || 'null');
+      return t && typeof t.uid === 'string' && /^(127\.0\.0\.1|localhost|[a-z0-9-]+\.localhost):\d+$/.test(t.emu) ? t : null;
+    } catch (e) { return null; }
+  })();
 
   // ---------- small helpers ----------
   const $ = (s, r) => (r || document).querySelector(s);
@@ -49,6 +60,9 @@
     link: svg('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
     send: svg('<path d="M4 12l16-8-6 16-3-6z"/>', 20),
+    phone: svg('<path d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>'),
+    phoneDown: svg('<path transform="rotate(135 12 12)" d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/>'),
+    phoneMissed: svg('<path d="M5 3.5h3.5l2 5-2.6 1.6a11.5 11.5 0 0 0 6 6l1.6-2.6 5 2V19a2 2 0 0 1-2 2A17 17 0 0 1 3 5.5a2 2 0 0 1 2-2z"/><path d="M15 3l6 6M21 3l-6 6"/>'),
     google: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1 .7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6h-4a12 12 0 0 0 0 10.8z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>'
   };
   const ms = (t) => (t && typeof t.toMillis === 'function' ? t.toMillis() : 0);
@@ -102,7 +116,11 @@
     chatWith: null, msgs: [], msgUnsub: null, msgLimit: 60, editing: null, focusMsg: null,
     seenMsgs: new Set(), seenReady: false,
     search: { q: '', res: [], busy: false }, adminSearch: { q: '', res: [], sel: null }, pwShown: new Set(),
-    lastSeenAt: new Map(), audio: null
+    lastSeenAt: new Map(), audio: null,
+    v2: false, v2Timer: 0, skew: 0, skewKnown: false,   // the database rules of version 18 are in; server clock − mine
+    live: new Map(), liveKnown: new Set(), liveWatch: new Map(),   // friends' live/<uid> (what their app can do)
+    callUnsub: null, out: null, ring: null,   // my outgoing call; the incoming one on screen
+    ringLog: new Map(), silenced: new Map(), missedAt: new Map()
   };
   const peerWatch = new Map(); // account uid -> Set(peer ids in my call)
 
@@ -112,6 +130,10 @@
     const [a, A, D] = await Promise.all([import(FB + 'firebase-app.js'), import(FB + 'firebase-auth.js'), import(FB + 'firebase-firestore.js')]);
     const app = a.initializeApp(CFG);
     S.F = { auth: A.getAuth(app), db: D.getFirestore(app), A, D };
+    if (TEST) {
+      const [host, port] = TEST.emu.split(':');
+      D.connectFirestoreEmulator(S.F.db, host, +port, { mockUserToken: { sub: TEST.uid, user_id: TEST.uid, email: TEST.uid + '@test.local', email_verified: true } });
+    }
     return S.F;
   }
   const d = (...p) => S.F.D.doc(S.F.db, ...p);
@@ -134,6 +156,7 @@
   async function signOut() {
     writePresence(true);
     await new Promise((r) => setTimeout(r, 300));
+    if (TEST) { onUser(null); return; }
     try { await S.F.A.signOut(S.F.auth); } catch (e) {}
   }
 
@@ -143,8 +166,12 @@
     S.unsub = []; S.watched.clear(); S.presWatch.clear(); S.hiddenBy.clear();
     if (S.msgUnsub) { S.msgUnsub(); S.msgUnsub = null; }
     if (S.modUnsub) { S.modUnsub(); S.modUnsub = null; }
-    clearInterval(S.presTimer);
-    S.started = false; S.isAdmin = false;
+    if (S.callUnsub) { S.callUnsub(); S.callUnsub = null; }
+    for (const u of S.liveWatch.values()) { try { u(); } catch (e) {} }
+    S.liveWatch.clear(); S.live.clear(); S.liveKnown.clear();
+    endOutgoing(); closeRing();
+    clearInterval(S.presTimer); clearTimeout(S.v2Timer);
+    S.started = false; S.isAdmin = false; S.v2 = false;
     S.friends.clear(); S.chats.clear(); S.blocked.clear(); S.profiles.clear(); S.presence.clear();
     S.chatWith = null; S.msgs = [];
   }
@@ -181,9 +208,11 @@
         const other = v.users[0] === uid ? v.users[1] : v.users[0];
         S.friends.set(other, { id: x.id, other, status: v.status, from: v.from });
         watchUser(other);
+        if (v.status === 'accepted') watchLive(other);
       });
       // Someone removed me (maybe blocked me): ask the server again whether I may see their status.
       for (const u of before) if (!S.friends.has(u)) restartPresence(u);
+      for (const u of Array.from(S.liveWatch.keys())) if (!isFriend(u)) unwatchLive(u);
       renderAll();
     }, onListenErr));
     S.unsub.push(D.onSnapshot(D.query(col('chats'), D.where('users', 'array-contains', uid)), (qs) => {
@@ -209,6 +238,7 @@
       renderAll();
     }, onListenErr));
     checkAdmin();
+    probeV2();
     for (const acc of peerWatch.keys()) watchUser(acc);
   }
   // Am I an admin? By password (admins/<me> exists) or by e-mail listed in the rules
@@ -390,12 +420,12 @@
     }
     return id;
   }
-  async function postMessage(uid, text, fwd) {
+  async function postMessage(uid, text, fwd, extra) {
     const D = S.F.D;
     text = String(text || '').trim().slice(0, 2000);
     if (!text) return;
     const id = await ensureChat(uid);
-    const msg = { from: myUid(), text, at: now() };
+    const msg = Object.assign({ from: myUid(), text, at: now() }, extra || {});
     if (fwd) msg.fwd = fwd;
     await D.addDoc(col('chats', id, 'messages'), msg);
     await D.updateDoc(d('chats', id), { lastAt: now(), last: { text: text.slice(0, 140), from: myUid() }, ['read.' + myUid()]: now() });
@@ -489,6 +519,8 @@
     if (S.blocked.has(c.other)) return;
     const viewing = S.open && S.tab === 'chats' && S.chatWith === c.other && document.hasFocus();
     if (viewing) return;
+    // the "missed call" message right after the ring ended (already shown), or a person who keeps calling
+    if (Date.now() - (S.missedAt.get(c.other) || 0) < 20000 || (S.silenced.get(c.other) || 0) > Date.now()) return;
     APP.flash();
     if (Call.info().status !== 'dnd') ping();
     toast(nameOf(c.other) + ': ' + (c.last.text || '').slice(0, 80), () => openChat(c.other), true);
@@ -532,6 +564,310 @@
     }
     if (last < text.length) out.push(text.slice(last));
     return out;
+  }
+
+  // ---------- database rules of version 18: live/<uid> ----------
+  // Calls (and the other version 18+ things) need the new database rules. Until the owner publishes them
+  // the server refuses to read live/<me>: then the new buttons stay hidden and nothing new is written
+  // (the old rules would refuse it anyway). Checked again every 10 minutes.
+  async function probeV2() {
+    const uid = myUid();
+    clearTimeout(S.v2Timer);
+    if (!uid || S.v2) return;
+    try { await S.F.D.getDoc(d('live', uid)); }
+    catch (e) {
+      if (myUid() === uid) S.v2Timer = setTimeout(probeV2, /permission/.test(e && e.code) ? 600000 : 60000);
+      return;
+    }
+    if (myUid() !== uid || S.v2) return;
+    S.v2 = true;
+    await writeLive();
+    startCalls();
+    for (const f of S.friends.values()) if (f.status === 'accepted') watchLive(f.other);
+    renderAll();
+  }
+  // My live/<uid> tells friends' apps what mine can do. Writing it also shows how far my clock is
+  // from the server's (friends' clocks are sometimes off) — that's how the age of a call is judged.
+  async function writeLive() {
+    if (!S.v2) return;
+    try {
+      const t0 = Date.now();
+      await S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now() }, { merge: true });
+      const t1 = Date.now();
+      const at = ms((await S.F.D.getDoc(d('live', myUid()))).get('at'));
+      if (at) { S.skew = at - (t0 + t1) / 2; S.skewKnown = true; }
+    } catch (e) {}
+  }
+  const serverNow = () => Date.now() + S.skew;
+  function watchLive(uid) {
+    if (!S.v2 || !uid || uid === myUid() || S.liveWatch.has(uid)) return;
+    S.liveWatch.set(uid, S.F.D.onSnapshot(d('live', uid), (s) => {
+      S.liveKnown.add(uid);
+      if (s.exists()) S.live.set(uid, s.data({ serverTimestamps: 'estimate' })); else S.live.delete(uid);
+      renderAll();
+    }, () => { S.liveWatch.delete(uid); S.live.delete(uid); S.liveKnown.delete(uid); }));
+  }
+  function unwatchLive(uid) {
+    const un = S.liveWatch.get(uid);
+    if (un) { try { un(); } catch (e) {} }
+    S.liveWatch.delete(uid); S.live.delete(uid); S.liveKnown.delete(uid);
+  }
+
+  // ---------- calls: one document per pair of friends, calls/<pair> ----------
+  // ring (I call) → ok / no (the friend took it / declined) or end (I hung up / no answer in 30 s).
+  // Taken: both go to one channel — the caller's if they're in one, else the friend's, else a new one.
+  function canCall(uid) {
+    return S.v2 && isFriend(uid) && !S.blocked.has(uid) && !S.hiddenBy.has(uid) && !((S.me && S.me.mod) || {}).banned;
+  }
+  // A fresh channel for a call: 10 random letters and digits (a channel code works as its password).
+  function newCode() {
+    const A = 'abcdefghijkmnpqrstuvwxyz23456789', a = new Uint32Array(10);
+    crypto.getRandomValues(a);
+    return Array.from(a, (n) => A[n % A.length]).join('');
+  }
+  function joinCode(code) {
+    show(false);
+    $('#sxCard').hidden = true;
+    Call.join(code);
+  }
+  function startCalls() {
+    if (S.callUnsub || !S.v2) return;
+    const D = S.F.D, uid = myUid();
+    let first = true;
+    S.callUnsub = D.onSnapshot(D.query(col('calls'), D.where('users', 'array-contains', uid)), (qs) => {
+      qs.docChanges().forEach((ch) => { if (ch.type !== 'removed') onCallDoc(ch.doc.id, ch.doc.data({ serverTimestamps: 'estimate' }), first); });
+      first = false;
+    }, () => {
+      S.callUnsub = null;
+      setTimeout(() => { if (S.v2 && myUid() === uid) startCalls(); }, 5000);
+    });
+  }
+  function onCallDoc(pid, c, first) {
+    const me = myUid();
+    if (!c || !Array.isArray(c.users)) return;
+    const o = S.out;
+    if (o && o.pid === pid && o.sent) {
+      if (c.from !== me) endOutgoing(); // the friend called me at the same moment: their call wins
+      else if (c.state === 'ok') answered(o, c.code);
+      else if (c.state === 'no') { endOutgoing(); toast(nameOf(o.uid) + ' сейчас не может ответить'); }
+    }
+    if (c.to !== me) return;
+    if (c.state === 'ring') {
+      // A call that just changed is "now". One found at start-up (or after the internet came back)
+      // must be younger than the ring time.
+      if ((first || S.skewKnown) && serverNow() - ms(c.at) > RING_MS + 5000) return;
+      incoming(pid, c);
+    } else if (S.ring && S.ring.pid === pid) {
+      const r = S.ring;
+      closeRing();
+      if (c.state === 'end') missed(r.uid);
+      // ok / no from my other computer: nothing more to do here
+    }
+  }
+
+  // ----- I call -----
+  async function startCall(uid) {
+    if (!canCall(uid) || S.out) return;
+    if (S.ring && S.ring.uid === uid) { acceptRing(); return; } // they're calling me right now
+    // A friend whose app can't take calls (an older version) gets an invitation in the chat instead.
+    const lv = S.live.get(uid);
+    if (S.liveKnown.has(uid) && !(lv && lv.v >= 18)) { inviteOld(uid); return; }
+    const ci = Call.info();
+    const o = { uid, pid: chatIdWith(uid), code: ci.inCall ? ci.code : newCode(), inCall: !!ci.inCall, started: Date.now(), sent: true, timer: 0 };
+    S.out = o;
+    paintOut(); startTone('back'); renderAll();
+    try {
+      await S.F.D.setDoc(d('calls', o.pid), { users: [myUid(), uid], from: myUid(), to: uid, code: o.code, inCall: o.inCall, state: 'ring', at: now() });
+    } catch (e) {
+      if (S.out === o) endOutgoing();
+      toast(/permission/.test(e && e.code) ? 'Не получилось позвонить. Если только что звонил — подожди 15 секунд.' : 'Не получилось: ' + errText(e));
+      return;
+    }
+    if (S.out === o) o.timer = setTimeout(() => hangUp(true), RING_MS);
+  }
+  async function hangUp(noAnswer) {
+    const o = S.out; if (!o) return;
+    endOutgoing();
+    try { await S.F.D.updateDoc(d('calls', o.pid), { state: 'end' }); }
+    catch (e) {
+      // the friend picked up at the very same moment: connect after all
+      try { const c = (await S.F.D.getDoc(d('calls', o.pid))).data(); if (c && c.from === myUid() && c.state === 'ok') answered(o, c.code); } catch (e2) {}
+      return;
+    }
+    if (noAnswer) toast('Нет ответа: ' + nameOf(o.uid));
+    postMessage(o.uid, Call.prefs().lang === 'en' ? '📞 Missed call' : '📞 Пропущенный звонок', null, { call: 'missed' }).catch(() => {});
+  }
+  function answered(o, code) {
+    endOutgoing();
+    toast('Звонок принят: ' + nameOf(o.uid));
+    const ci = Call.info();
+    if (!(ci.inCall && ci.code === code)) joinCode(code);
+  }
+  function endOutgoing() {
+    const o = S.out; S.out = null;
+    if (o) clearTimeout(o.timer);
+    clearInterval(S.outTick);
+    stopTone('back');
+    const bar = $('#sxCallBar'); if (bar) { bar.hidden = true; bar.textContent = ''; }
+    if (o && S.started) renderAll();
+  }
+  function paintOut() {
+    const o = S.out, bar = $('#sxCallBar'); if (!o) return;
+    const p = S.profiles.get(o.uid), stt = statusOf(o.uid);
+    const time = h('span', {});
+    const tick = () => { time.textContent = '0:' + String(Math.floor((Date.now() - o.started) / 1000)).padStart(2, '0'); };
+    tick(); clearInterval(S.outTick); S.outTick = setInterval(tick, 1000);
+    bar.textContent = '';
+    bar.append(
+      h('span', { class: 'sx-cb-av' }, avatar(o.uid, 36, false)),
+      h('span', { class: 'sx-cb-t' },
+        h('b', { translate: 'no' }, p ? p.name : '…'),
+        h('span', { class: 's' }, h('span', {}, stt === 'dnd' ? 'Звоню… Не беспокоить — может не ответить' : stt === 'offline' ? 'Звоню… Не в сети — может не ответить' : 'Звоню…'), ' · ', time)),
+      h('button', { type: 'button', class: 'btn small sx-cb-end', onclick: () => hangUp(false), html: I.phoneDown + '<span>Отменить</span>' }));
+    bar.hidden = false;
+  }
+  // A friend on an older version can't get calls: invite them to my channel in the chat instead.
+  async function inviteOld(uid) {
+    toast('У друга старая версия Walkie-Talkie — отправляю приглашение в личку');
+    if (!Call.info().inCall) {
+      joinCode(newCode());
+      for (let i = 0; i < 40 && !Call.info().inCall; i++) await new Promise((r) => setTimeout(r, 500));
+    }
+    if (Call.info().inCall) inviteToCall(uid);
+  }
+
+  // ----- I'm called -----
+  function incoming(pid, c) {
+    const uid = c.from, t = Date.now();
+    if (S.blocked.has(uid) || !isFriend(uid)) return;
+    if (S.ring && S.ring.pid === pid && S.ring.at === ms(c.at)) return;
+    // Someone keeps calling and I don't pick up: after the 3rd call in 2 minutes, 10 quiet minutes
+    // (their calls only show up as "missed").
+    if ((S.silenced.get(uid) || 0) > t) return;
+    const log = (S.ringLog.get(uid) || []).filter((x) => t - x < 120000);
+    log.push(t); S.ringLog.set(uid, log);
+    if (log.length >= 3) S.silenced.set(uid, t + 600000);
+    if (Call.info().status === 'dnd') return; // do not disturb: only the "missed call" in the chat
+    if (S.ring && S.ring.pid !== pid) { toast(nameOf(uid) + ' тоже звонит тебе'); return; }
+    S.ring = { pid, uid, code: c.code, inCall: !!c.inCall, at: ms(c.at) };
+    clearTimeout(S.ringTimer);
+    // the caller ends it after 30 s; this is in case their app was closed meanwhile
+    S.ringTimer = setTimeout(() => { if (S.ring && S.ring.pid === pid) { closeRing(); missed(uid); } }, RING_MS + 5000);
+    paintRing();
+    startTone('ring');
+    if (!document.hasFocus()) { APP.flash(); notifyCall(uid); }
+  }
+  function paintRing() {
+    const r = S.ring, box = $('#sxRing'); if (!r) return;
+    const p = S.profiles.get(r.uid);
+    box.textContent = '';
+    box.append(h('div', { class: 'sx-ring-box' },
+      h('div', { class: 'sx-ring-av' }, h('span', { class: 'sx-ring-wave' }), h('span', { class: 'sx-ring-wave w2' }), avatar(r.uid, 104, false)),
+      h('div', { class: 'sx-ring-name', translate: 'no' }, p ? p.name : '…'),
+      h('div', { class: 's' }, r.inCall ? 'Зовёт тебя в свой канал' : 'Звонит тебе'),
+      h('div', { class: 'sx-ring-acts' },
+        h('button', { type: 'button', class: 'btn sx-ring-no', onclick: declineRing, html: I.phoneDown + '<span>Отклонить</span>' }),
+        h('button', { type: 'button', class: 'btn sx-ring-yes', onclick: acceptRing, html: I.phone + '<span>Принять</span>' }))));
+    box.hidden = false;
+  }
+  async function acceptRing() {
+    const r = S.ring; if (!r) return;
+    closeRing();
+    S.ringLog.delete(r.uid); S.silenced.delete(r.uid);
+    const ci = Call.info();
+    // the caller isn't in a channel and I am: they come to mine
+    const mine = !r.inCall && ci.inCall;
+    try { await S.F.D.updateDoc(d('calls', r.pid), mine ? { state: 'ok', code: ci.code } : { state: 'ok' }); }
+    catch (e) { toast(/permission/.test(e && e.code) ? 'Звонок уже закончился' : 'Не получилось: ' + errText(e)); return; }
+    if (mine) toast(nameOf(r.uid) + ' сейчас зайдёт к тебе в канал');
+    else joinCode(r.code);
+  }
+  function declineRing() {
+    const r = S.ring; if (!r) return;
+    closeRing();
+    S.F.D.updateDoc(d('calls', r.pid), { state: 'no' }).catch(() => {});
+  }
+  function closeRing() {
+    const r = S.ring; S.ring = null;
+    clearTimeout(S.ringTimer);
+    stopTone('ring');
+    const box = $('#sxRing'); if (box) { box.hidden = true; box.textContent = ''; }
+    if (r && APP.closeNotify) APP.closeNotify('call');
+  }
+  function missed(uid) {
+    S.missedAt.set(uid, Date.now());
+    toast('Пропущенный звонок: ' + nameOf(uid), () => openChat(uid));
+  }
+  // The window is minimized or behind a game: a Windows notification as well (the sound is ours).
+  async function notifyCall(uid) {
+    if (!APP.notify) return;
+    const p = S.profiles.get(uid);
+    const icon = await pngAvatar(p);
+    if (!S.ring || S.ring.uid !== uid) return;
+    APP.notify({ tag: 'call', title: p ? p.name : 'Walkie-Talkie', body: Call.prefs().lang === 'en' ? 'Calling you — open Walkie-Talkie to answer' : 'Звонит тебе — открой Walkie-Talkie, чтобы ответить', icon });
+  }
+  // Windows notifications take PNG; avatars are WebP.
+  async function pngAvatar(p) {
+    const src = p && safeAv(p.avatar);
+    if (!src) return '';
+    try {
+      const img = await createImageBitmap(await (await fetch(src)).blob());
+      const cv = document.createElement('canvas'); cv.width = cv.height = 96;
+      const g = cv.getContext('2d');
+      g.beginPath(); g.arc(48, 48, 48, 0, Math.PI * 2); g.clip();
+      g.drawImage(img, 0, 0, 96, 96);
+      return cv.toDataURL('image/png');
+    } catch (e) { return ''; }
+  }
+
+  // ----- sounds, made on the spot: the ringtone (I'm called) and the ringback (I call) -----
+  const tones = {};
+  function startTone(kind) {
+    stopTone(kind);
+    const play = kind === 'ring' ? ringOnce : backOnce;
+    play();
+    tones[kind] = setInterval(play, kind === 'ring' ? 2600 : 4000);
+  }
+  function stopTone(kind) { clearInterval(tones[kind]); delete tones[kind]; }
+  function actx() {
+    if (!S.audio) S.audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (S.audio.state === 'suspended') S.audio.resume().catch(() => {});
+    return S.audio;
+  }
+  function note(ctx, f, at, len, vol) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    o.connect(g); g.connect(ctx.destination); o.start(at); o.stop(at + len + 0.02);
+  }
+  // a soft marimba-like phrase, played twice
+  function ringOnce() {
+    try {
+      const ctx = actx(), t = ctx.currentTime + 0.02;
+      [[784, 0], [988, 0.14], [1175, 0.28], [988, 0.42], [784, 0.9], [988, 1.04], [1175, 1.18], [1568, 1.32]].forEach(([f, dl]) => {
+        note(ctx, f, t + dl, 0.5, 0.09);
+        note(ctx, f * 4, t + dl, 0.12, 0.012); // a woody overtone
+      });
+    } catch (e) {}
+  }
+  // the calm "tuu…" while waiting for an answer
+  function backOnce() {
+    try {
+      const ctx = actx(), t = ctx.currentTime + 0.02;
+      for (const f of [425, 450]) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.025, t + 0.05);
+        g.gain.setValueAtTime(0.025, t + 1); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.15);
+        o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 1.2);
+      }
+    } catch (e) {}
+  }
+  function callBtn(uid) {
+    if (!canCall(uid)) return null;
+    return h('button', { type: 'button', class: 'sx-callbtn', 'aria-label': 'Позвонить', title: S.out ? 'Ты уже звонишь' : 'Позвонить', disabled: !!S.out, html: I.phone, onclick: () => startCall(uid) });
   }
 
   // ---------- admin ----------
@@ -667,7 +1003,9 @@
       h('div', { id: 'sxSetup', class: 'modal', hidden: true, role: 'dialog', 'aria-modal': 'true' }),
       h('div', { id: 'sxCard', class: 'modal', hidden: true, role: 'dialog', 'aria-modal': 'true', onclick: (e) => { if (e.target.id === 'sxCard') e.target.hidden = true; } }),
       h('div', { id: 'sxMenu', class: 'pop', hidden: true, role: 'menu' }),
-      h('div', { id: 'sxToast', class: 'sx-toast', hidden: true, role: 'status' })
+      h('div', { id: 'sxToast', class: 'sx-toast', hidden: true, role: 'status' }),
+      h('div', { id: 'sxRing', class: 'sx-ring', hidden: true, role: 'alertdialog', 'aria-label': 'Входящий звонок' }),
+      h('div', { id: 'sxCallBar', class: 'sx-callbar', hidden: true, role: 'status' })
     );
   }
   function show(open) {
@@ -836,7 +1174,7 @@
       incoming.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Заявки в друзья · ' + incoming.length),
         h('ul', { class: 'sx-list' }, incoming.map((u) => personRow(u, [button('Принять', () => acceptFriend(u), 'btn-primary'), button('Отклонить', () => removeFriend(u))])))) : null,
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Друзья · ' + friends.length + (friends.length ? ' · в сети ' + online : '')),
-        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [button('Написать', () => openChat(u)), friendMenuBtn(u)])))
+        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [callBtn(u), button('Написать', () => openChat(u)), friendMenuBtn(u)])))
           : h('p', { class: 's' }, 'Пока никого. Найди друга по тегу — тег виден у него в профиле.')),
       outgoing.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Ты отправил заявки'),
         h('ul', { class: 'sx-list' }, outgoing.map((u) => personRow(u, button('Отменить', () => removeFriend(u)))))) : null,
@@ -871,7 +1209,8 @@
       h('button', { type: 'button', class: 'sx-person-main', onclick: () => openProfile(other) },
         avatar(other, 36, true),
         h('span', { class: 'sx-person-t' }, h('b', { translate: 'no' }, p ? p.name : '…'), h('span', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(other)))),
-      Call.info().inCall && canWrite ? button('Позвать в канал', () => inviteToCall(other)) : null);
+      Call.info().inCall && canWrite ? button('Позвать в канал', () => inviteToCall(other)) : null,
+      callBtn(other));
 
     const box = h('div', { class: 'sx-msgs', id: 'sxMsgs' });
     if (!S.msgsFull && S.msgs.length >= S.msgLimit) box.append(h('div', { class: 'sx-more' }, button('Показать раньше', () => { S.msgLimit += 60; subscribeMessages(); })));
@@ -910,8 +1249,17 @@
     const side = grouped ? h('span', { class: 'sx-msg-time-side', text: at ? timeFmt.format(new Date(at)) : '' }) : avatar(m.from, 36, false);
     const content = h('div', { class: 'sx-msg-c' });
     if (!grouped) content.append(h('div', { class: 'sx-msg-h' }, h('b', { translate: 'no' }, nameOf(m.from)), h('span', { class: 's', title: at ? new Date(at).toLocaleString(Call.prefs().lang === 'en' ? 'en-GB' : 'ru') : '' }, at ? timeFmt.format(new Date(at)) : 'отправляется…')));
+    const isCall = m.call === 'missed';
     if (m.deleted) content.append(h('div', { class: 'sx-msg-t deleted' }, 'Сообщение удалено'));
-    else {
+    else if (isCall) {
+      // "missed call" (the text under it is for older versions)
+      const other = S.chatWith;
+      content.append(h('div', { class: 'sx-callmsg' + (mine ? '' : ' in') },
+        h('span', { class: 'ic', html: I.phoneMissed }),
+        h('span', {}, mine ? 'Звонок без ответа' : 'Пропущенный звонок'),
+        canCall(other) ? button(mine ? 'Позвонить ещё раз' : 'Перезвонить', () => startCall(other), '', { disabled: !!S.out }) : null));
+      if (read) content.append(h('div', { class: 'sx-read' }, 'прочитано'));
+    } else {
       if (m.fwd) content.append(h('div', { class: 'sx-fwd' }, 'Переслано от ' + (m.fwd.name || 'кого-то')));
       content.append(h('div', { class: 'sx-msg-t' }, h('span', { translate: 'no' }, linkify(m.text || '')), m.editedAt ? h('span', { class: 'sx-edited', title: new Date(ms(m.editedAt)).toLocaleString(Call.prefs().lang === 'en' ? 'en-GB' : 'ru') }, ' (изменено)') : null));
       const rx = m.reactions || {};
@@ -923,7 +1271,13 @@
       if (read) content.append(h('div', { class: 'sx-read' }, 'прочитано'));
     }
     el.append(side, content);
-    if (!m.deleted) {
+    if (isCall && mine && !m.deleted) {
+      const bar = h('div', { class: 'sx-msg-bar' });
+      const b = h('button', { type: 'button', 'aria-label': 'Удалить', title: 'Удалить', html: I.trash });
+      b.addEventListener('click', () => menu(b, [{ text: 'Удалить сообщение', danger: true, run: () => deleteMessage(m) }]));
+      bar.append(b);
+      el.append(bar);
+    } else if (!m.deleted && !isCall) {
       const bar = h('div', { class: 'sx-msg-bar' });
       const act = (icon, title, fn) => { const b = h('button', { type: 'button', 'aria-label': title, title, html: icon }); b.addEventListener('click', () => fn(b)); return b; };
       bar.append(...[
@@ -1046,7 +1400,10 @@
       else if (S.blocked.has(uid)) acts = [button('Разблокировать', () => unblock(uid).then(paint))];
       else {
         if (!f) acts.push(button('Добавить в друзья', () => addFriend(uid).then(paint), 'btn-primary'));
-        else if (f.status === 'accepted') acts.push(button('Написать', () => { card.hidden = true; openChat(uid); }, 'btn-primary'));
+        else if (f.status === 'accepted') {
+          acts.push(button('Написать', () => { card.hidden = true; openChat(uid); }, 'btn-primary'));
+          if (canCall(uid)) acts.push(button('Позвонить', () => { card.hidden = true; startCall(uid); }, '', { disabled: !!S.out }));
+        }
         else if (f.from === me) acts.push(h('span', { class: 's' }, 'Заявка отправлена'));
         else acts.push(button('Принять заявку', () => acceptFriend(uid).then(paint), 'btn-primary'));
         acts.push(button('Заблокировать', () => block(uid).then(paint)));
@@ -1250,6 +1607,36 @@
 .sx-msg.new { animation: wt-rise .22s var(--ease); }
 .sx-chatrow, .sx-person { transition: background-color .14s var(--ease); }
 #sxCard, #sxSetup { z-index: 35; }
+.sx-callbtn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: transparent; color: var(--fg); transition: border-color .14s var(--ease), color .14s var(--ease), transform .1s var(--ease); }
+.sx-callbtn:hover:not(:disabled) { border-color: var(--ok); color: var(--ok); }
+.sx-callbtn:active:not(:disabled) { transform: scale(.94); }
+.sx-callbtn:disabled { opacity: .45; cursor: default; }
+.sx-ring { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: var(--overlay); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.sx-ring:not([hidden]) { animation: wt-fade .16s ease-out; }
+.sx-ring-box { width: min(340px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 22px 22px; border-radius: var(--r-l); background: var(--panel); border: 1px solid var(--line-2); box-shadow: 0 24px 70px var(--overlay); text-align: center; animation: wt-pop .22s var(--ease); }
+.sx-ring .s, .sx-callbar .s { color: var(--muted); font-size: .88rem; }
+.sx-ring-av { position: relative; display: grid; place-items: center; width: 156px; height: 156px; margin-bottom: 4px; }
+.sx-ring-wave { position: absolute; inset: 26px; border-radius: 50%; border: 2px solid var(--ok); animation: sxwave 1.8s ease-out infinite; }
+.sx-ring-wave.w2 { animation-delay: .9s; }
+@keyframes sxwave { from { transform: scale(1); opacity: .9; } to { transform: scale(1.45); opacity: 0; } }
+.sx-ring-name { font-family: var(--f-display); font-weight: 700; font-size: 1.3rem; overflow-wrap: anywhere; }
+.sx-ring-acts { display: flex; gap: 10px; margin-top: 16px; width: 100%; }
+.sx-ring-acts .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 10px; border: none; color: var(--on-live); }
+.sx-ring-acts .btn:hover { filter: brightness(1.08); }
+.sx-ring-no, .sx-cb-end { background: var(--danger) !important; border-color: var(--danger) !important; color: var(--on-live) !important; }
+.sx-ring-yes { background: var(--ok); }
+.sx-callbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 46; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); padding: 7px 7px 7px 9px; border-radius: 999px; background: var(--panel); border: 1px solid var(--ok); box-shadow: 0 12px 36px var(--overlay); }
+.sx-callbar:not([hidden]) { animation: wt-toast .2s var(--ease); }
+.sx-cb-av { position: relative; display: grid; }
+.sx-cb-av::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--ok); animation: sxwave 1.8s ease-out infinite; }
+.sx-cb-t { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.sx-cb-t b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-cb-t .s { font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.sx-cb-end { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.sx-callmsg { display: flex; width: fit-content; align-items: center; flex-wrap: wrap; gap: 8px 10px; max-width: 100%; margin: 3px 0 2px; padding: 8px 10px 8px 12px; border-radius: 14px; background: var(--raise); border: 1px solid var(--line); }
+.sx-callmsg .ic { display: grid; color: var(--muted); }
+.sx-callmsg.in .ic { color: var(--danger); }
+@media (prefers-reduced-motion: reduce) { .sx-ring-wave, .sx-cb-av::after { animation: none; opacity: .5; } }
 @media (max-width: 820px) {
   .sx-chats { grid-template-columns: 1fr; }
   .sx-chats.has-conv .sx-chatlist { display: none; }
@@ -1276,6 +1663,9 @@
     }
   };
 
+  // For troubleshooting from the console (F12) with ?debug: window.__raciaSocial
+  if (/[?&]debug\b/.test(location.search)) window.__raciaSocial = S;
+
   // ---------- start ----------
   injectStyles();
   buildShell();
@@ -1287,7 +1677,8 @@
     if (S.me) renderAll();
   }, 30000);
   fb().then(() => {
-    S.F.A.onAuthStateChanged(S.F.auth, onUser);
+    if (TEST) onUser({ uid: TEST.uid, email: TEST.uid + '@test.local', displayName: TEST.name || '', photoURL: '' });
+    else S.F.A.onAuthStateChanged(S.F.auth, onUser);
     if (APP.pendingLink) APP.pendingLink().then((l) => { if (l) setTimeout(() => openLink(l), 1500); }).catch(() => {});
     if (APP.onLink) APP.onLink(openLink);
   }).catch((e) => { S.loadErr = String((e && e.message) || e); renderAcct(); });
