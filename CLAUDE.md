@@ -50,7 +50,9 @@ https://github.com/pashok3345u-netizen/walkie-talkie — он же источн�
   Отладка: F12 в программе; с `?debug` в адресе доступен `window.__racia`.
 - `app/social.js` — аккаунты (вход через Google), профили, друзья, личные сообщения, админка.
   Firebase, проект `walkie-talkie-01`. Работает только в программе. Права доступа задают правила
-  Firestore (firestore.rules) — их в этом репозитории нет, они в консоли Firebase.
+  Firestore (firestore.rules) — в репозитории их нет (там почты админов), они в консоли Firebase.
+  Копия — в `private/` (в .gitignore): `firestore.rules` (новые), `firestore.rules.old` (прежние).
+  Правила меняет только владелец, вставкой в консоль; перед этим — `tools/rules-test` (см. «Как тестировать»).
 - `app/i18n.js` — английский интерфейс: словарь «русская строка → английская», подменяет текст на лету
   (MutationObserver). **Каждую новую русскую надпись (текст, placeholder, title, aria-label) добавлять
   в словарь.** То, что пишут люди (имена, сообщения), помечать `translate="no"`.
@@ -161,6 +163,19 @@ https://github.com/electron/electron/releases/tag/v44.7.0 во временну�
   `--shot` + чтение PNG — проверка вида в трёх темах и на английском (`--theme`, `--lang`).
   `document.hasFocus()` у тестовых окон обычно false — непрочитанные не сбрасываются, это нормально.
 Для проверки владельцем — `--manual=1`: настоящий микрофон, окно с заголовком «ТЕСТОВАЯ КОПИЯ».
+
+**Правила базы** — `tools/rules-test` в эмуляторе Firestore (настоящую базу не трогает).
+Нужны Java 21 (Temurin JRE zip) и `cloud-firestore-emulator-v*.jar` (адрес и SHA-256 —
+в `src/emulator/downloadableEmulatorInfo.json` репозитория firebase-tools), всё во временной папке.
+- Эмулятор: `java -Duser.language=en -Duser.country=US -jar emu.jar --host 127.0.0.1 --port 8085
+  --project_id demo-wt` (без `-Duser.language=en` на русской Windows падает на тексте ошибки).
+- `electron.exe tools/rules-test --rules=private/firestore.rules [--old=1] [--slow=1]`.
+  Шаги `[old]` — то, что делают старые версии (должно работать всегда), `[new]` — новое.
+  `--old=1` — прогон на прежних правилах: всё новое должно быть отклонено (так новая версия понимает,
+  что правила ещё не обновлены). Почты админов скрипт берёт из файла правил, вместо `PASSWORD_HASH`
+  подставляет отпечаток тестового пароля.
+- Каждому тестовому человеку — свой адрес `<имя>.localhost`: браузер держит не больше 6 соединений
+  на один адрес, иначе седьмой зависает.
 
 ## Выпуск новой версии
 
