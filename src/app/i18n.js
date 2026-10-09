@@ -38,6 +38,7 @@
     'Не получается достучаться ни до одного сервера-посредника. Похоже, их блокирует провайдер — включи VPN и зайди заново.': 'Cannot reach any relay server. Your provider may be blocking them — turn on a VPN and join again.',
     'Кто-то зашёл с этим кодом, но с другой версией страницы. Пусть скачает файл заново.': 'Someone joined with this code but uses a different version. Ask them to update.',
     'Друг нашёлся, но соединиться напрямую не получилось: ваши сети не пускают звонок. Попробуйте оба включить VPN или раздать интернет с телефона и зайти заново.': 'Your friend was found, but a direct connection failed: your networks block the call. Both try a VPN or a phone hotspot and join again.',
+    'Друг нашёлся, но соединиться не получилось ни напрямую, ни через сервер. Попробуйте оба включить VPN или раздать интернет с телефона и зайти заново.': 'Your friend was found, but the call failed both directly and through the server. Both try a VPN or a phone hotspot and join again.',
     'неизвестная ошибка': 'unknown error',
     'Пока никто ничего не показывает': 'Nobody is showing anything yet',
     'Включи камеру или покажи экран кнопками внизу.': 'Turn on your camera or share your screen with the buttons below.',
@@ -83,6 +84,7 @@
     'Меню': 'Menu', 'не задана': 'not set', 'Ё': '`', 'Х': '[', 'Ъ': ']', 'Ж': ';', 'Э': "'", 'Б': ',', 'Ю': '.',
     'График пинга за последнюю минуту': 'Ping chart for the last minute',
     'Когда в канале появятся друзья, здесь будет пинг до каждого.': 'When friends join, their ping will show up here.',
+    'напрямую': 'direct', 'через сервер': 'via server',
     // ---------- settings ----------
     'Закрыть настройки': 'Close settings', 'Закрыть': 'Close', 'Статус': 'Status', 'В сети': 'Online', 'Не беспокоить': 'Do not disturb',
     'Без звуков входа и выхода друзей. Друзья видят красный значок': 'No join and leave sounds. Friends see a red badge',

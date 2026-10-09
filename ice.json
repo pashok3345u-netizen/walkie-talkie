@@ -1,0 +1,12 @@
+{
+  "turn": [
+    {
+      "urls": [
+        "turn:free.expressturn.com:3478?transport=udp",
+        "turn:free.expressturn.com:3478?transport=tcp"
+      ],
+      "username": "000000002106905574",
+      "credential": "nVMvyEO5uMdIjOWce30glDM6JuU="
+    }
+  ]
+}
