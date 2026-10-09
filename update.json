@@ -1,12 +1,12 @@
 {
-  "version": 13,
+  "version": 14,
   "minEngine": "44.7.0",
-  "notes": "Обновления теперь приходят сами — через GitHub.",
+  "notes": "Студийный звук: Opus 510 кбит/с в стерео, фильтр и компрессор для голоса, музыкальный режим. Стримы: видеокарта, 6–8 Мбит/с, без фризов в играх и с чёткими окнами.",
   "files": {
     "RaciaKeys.cs": "83c682a1f80e6e37ec79a21e548937f2398838a5675a669ec88824c6c0016481",
-    "i18n.js": "f1376b42e85ee3b81fd926a1162e11ff1916656f3dbc53f6a0bbc7309aef3f67",
-    "index.html": "ccb140d1e51db1e61dc7fe62485ea6cd92c6fb7c885f4f16938d0c3cfd210b35",
-    "main.js": "1a5e9cb50d3610f69d1c4d0e2bd0ddf24664bf304f93e9bf9d397913ce48517b",
+    "i18n.js": "b9361bf5ab92414fcf40e3f17d735190c791740627cdffd66e18d94dcaa82580",
+    "index.html": "f673676bca6dd8915240edc04a52822847241debcddb8363b332f2d020d5508e",
+    "main.js": "5a80e250a31000cd5dd84930f28f82ce83029b07e020cab2f248cb09bd2cb398",
     "preload.js": "837712a4489938ba8377207d41616c92648ec878f4ec9fc1747e4f1a363661f4",
     "racia.ico": "8a32fb2db13e58954202be077c05795a3a6de3fb07285f085b11edfff881c3e5",
     "social.js": "f7772578f6074a108df4d0dc894d51e0dde72f150c8fb5662478948764ff5d80",

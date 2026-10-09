@@ -18,6 +18,12 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+// Стрим и камеру кодирует и декодирует видеокарта, а не процессор — иначе 1080p/60 в игре отъедает FPS.
+// Видеокарты из «чёрного списка» Chromium тоже пускаем. Флаги ставятся до запуска app (loader.js
+// подключает этот файл сразу, до события ready), иначе Chromium их не увидит.
+app.commandLine.appendSwitch('enable-accelerated-video-encode');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 let win = null;
 let quitting = false;

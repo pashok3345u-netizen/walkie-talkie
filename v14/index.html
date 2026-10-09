@@ -594,6 +594,34 @@ button.live:hover { filter: brightness(1.1); }
 .live-card .s { color: var(--card-muted); font-size: .85rem; }
 .live-card .live { position: absolute; top: 14px; left: 14px; font-size: .66rem; }
 .live-card .btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 13px 20px; }
+/* my own stream: a still card instead of the live picture (no endless mirror, no work for the GPU) */
+.vtile.self { background: var(--card-bg); }
+.vtile.self::before {
+  content: "";
+  position: absolute;
+  inset: auto -20% -60% -20%;
+  height: 90%;
+  background: var(--hero);
+  opacity: var(--card-glow);
+  filter: blur(60px);
+  pointer-events: none;
+}
+.self-ph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 20px 20px 64px;
+  text-align: center;
+  color: var(--card-fg);
+}
+.self-ph .ph-ico { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); border: 1px solid var(--line); color: var(--accent); margin-bottom: 4px; }
+.self-ph .t { font-family: var(--f-display); font-weight: 700; font-size: 1.1rem; }
+.self-ph .s { color: var(--card-muted); font-size: .85rem; }
+.self-ph .s2 { color: var(--card-muted); font-size: .76rem; opacity: .85; }
+.vtile.self .vctl { opacity: 1; }
 
 /* dock */
 .dock-inner { display: flex; align-items: stretch; justify-content: center; gap: 8px; width: 100%; max-width: 660px; }
@@ -991,7 +1019,7 @@ option { background: var(--panel); color: var(--fg); }
   <div class="join-wrap">
     <div class="join-meta">
       <span class="lbl">Голосовые звонки с друзьями</span>
-      <span class="lbl appVer">версия 13</span>
+      <span class="lbl appVer">версия 14</span>
     </div>
     <header class="hero">
       <svg class="wt-mark" viewBox="0 0 1000 483.4" aria-hidden="true"><use href="#wtMark" width="1000" height="483.4"/></svg>
@@ -1043,7 +1071,7 @@ option { background: var(--panel); color: var(--fg); }
   <header class="side-head">
     <div class="mini-brand">
       <svg class="wt-mark" viewBox="0 0 1000 483.4" aria-hidden="true"><use href="#wtMark" width="1000" height="483.4"/></svg>
-      <b class="wordmark">Walkie-Talkie</b><span class="appVer">версия 13</span>
+      <b class="wordmark">Walkie-Talkie</b><span class="appVer">версия 14</span>
     </div>
     <div class="chan-card">
       <div class="chan-row">
@@ -1180,6 +1208,14 @@ option { background: var(--panel); color: var(--fg); }
 
     <div class="set-row">
       <div class="set-text">
+        <div class="t" id="musicLabel">Музыкальный режим</div>
+        <div class="s" id="musicState"></div>
+      </div>
+      <button type="button" class="switch" id="musicBtn" role="switch" aria-labelledby="musicLabel"></button>
+    </div>
+
+    <div class="set-row">
+      <div class="set-text">
         <div class="t" id="duckLabel">Приглушать других, когда я говорю</div>
         <div class="s">Друзья и стримы становятся тише, пока ты говоришь</div>
       </div>
@@ -1215,16 +1251,16 @@ option { background: var(--panel); color: var(--fg); }
       <div class="qrow">
         <label>Качество голоса
           <select id="voiceRate">
-            <option value="0">Обычное</option>
-            <option value="24">Экономное · 24 кбит/с</option>
-            <option value="48">Хорошее · 48 кбит/с</option>
+            <option value="0">Студия · 510 кбит/с</option>
+            <option value="128">Очень высокое · 128 кбит/с</option>
             <option value="96">Высокое · 96 кбит/с</option>
-            <option value="128">Максимум · 128 кбит/с</option>
+            <option value="48">Хорошее · 48 кбит/с</option>
+            <option value="24">Экономное · 24 кбит/с</option>
           </select>
         </label>
         <label>Битрейт стримов
           <select id="streamRate">
-            <option value="0">Авто</option>
+            <option value="0">Авто · 6–8 Мбит/с</option>
             <option value="1500">1,5 Мбит/с</option>
             <option value="3000">3 Мбит/с</option>
             <option value="6000">6 Мбит/с</option>
@@ -1335,7 +1371,7 @@ function load(k) { try { return localStorage.getItem(k); } catch (e) { return nu
 function loadJson(k) { try { return JSON.parse(load(k) || '{}') || {}; } catch (e) { return {}; } }
 const settings = Object.assign({
   mode: 'voice', pttCode: 'KeyV', pttVk: 0x56, muteVk: 0, ns: true, duck: false, duckLevel: 0.3, screenAudio: true,
-  micId: '', outId: '', muteWarn: true, status: 'online', streamRes: 1080, streamFps: 30
+  micId: '', outId: '', muteWarn: true, status: 'online', streamRes: 1080, streamFps: 30, music: false
 }, loadJson('racia-settings'));
 // In the Windows program (window.racia from preload.js) keys work over games and the screen picker is our own.
 const APP = window.racia && typeof window.racia.setHotkeys === 'function' ? window.racia : null;
@@ -1632,29 +1668,59 @@ function screenTracks() {
   for (const e of st.viewerOut.values()) set.add(e.clone);
   return set;
 }
+// Stream bitrate when the owner leaves it on "Авто": by what's actually being captured.
+function streamTarget(t) {
+  const s = t.getSettings ? t.getSettings() : {};
+  const h = s.height || settings.streamRes || 1080;
+  return h >= 1400 ? 8000000 : h >= 1000 ? 6000000 : h >= 700 ? 4000000 : 2500000;
+}
+const VOICE_IDLE = 16000;   // muted / not holding the key: Opus doesn't need 510 kbps to send silence
+// Checked every second against what the sender really has, and set only when something differs:
+// a renegotiation can reset parameters, and a call that fails mid-negotiation is simply redone.
+const prmBusy = new WeakSet();
 function applyBitrates() {
   if (!st.room || typeof st.room.getPeers !== 'function') return;
   const rs = roomRules();
   const mic = st.stream && st.stream.getAudioTracks()[0];
   const scr = screenTracks();
+  const deg = st.screenKind === 'window' ? 'maintain-resolution' : 'maintain-framerate';
   let peers = {};
   try { peers = st.room.getPeers() || {}; } catch (e) { return; }
-  for (const pc of Object.values(peers)) {
+  for (const [id, pc] of Object.entries(peers)) {
     if (!pc || typeof pc.getSenders !== 'function') continue;
+    const n = st.net.get(id);
+    const vf = n && n.vf ? n.vf : 1; // < 1 when this friend is losing packets
     for (const snd of pc.getSenders()) {
       const t = snd.track; if (!t) continue;
-      let want = 0;
-      if (t === mic) want = rs.voice * 1000;
-      else if (scr.has(t)) want = rs.stream * 1000;
-      else if (t.kind === 'video') want = rs.stream ? Math.min(rs.stream, 1500) * 1000 : 0;
-      else continue;
+      // want: { max (0 = no cap), audio priority, degradation }
+      let want;
+      if (t.kind === 'audio') {
+        // Voice and stream sound go first when the network is tight; video gives way.
+        let max = t === mic ? rs.voice * 1000 : 0;
+        if (t === mic && !isSending()) max = max ? Math.min(max, VOICE_IDLE) : VOICE_IDLE;
+        want = { max, prio: 'high', deg: '' };
+      } else if (scr.has(t)) {
+        const base = rs.stream ? rs.stream * 1000 : streamTarget(t);
+        want = { max: Math.max(300000, Math.round(base * vf)), prio: '', deg };
+      } else {
+        const base = rs.stream ? Math.min(rs.stream, 1500) * 1000 : 2500000;
+        want = { max: Math.max(200000, Math.round(base * vf)), prio: '', deg: '' };
+      }
+      if (prmBusy.has(snd)) continue;
       let prm;
       try { prm = snd.getParameters(); } catch (e) { continue; }
       if (!prm.encodings || !prm.encodings.length) continue;
-      const cur = prm.encodings[0].maxBitrate || 0;
-      if (cur === want) continue;
-      if (want) prm.encodings[0].maxBitrate = want; else delete prm.encodings[0].maxBitrate;
-      quiet(snd.setParameters(prm));
+      const enc = prm.encodings[0];
+      // (a field this engine doesn't report back counts as fine; it's sent along with the next change)
+      const ok = (v, w) => v === undefined || v === w;
+      if ((enc.maxBitrate || 0) === want.max && (!want.prio || (ok(enc.priority, want.prio) && ok(enc.networkPriority, want.prio))) &&
+          (!want.deg || ok(prm.degradationPreference, want.deg))) continue;
+      if (want.max) enc.maxBitrate = want.max; else delete enc.maxBitrate;
+      if (want.prio) { enc.priority = want.prio; enc.networkPriority = want.prio; }
+      if (want.deg) prm.degradationPreference = want.deg;
+      prmBusy.add(snd);
+      const done = () => prmBusy.delete(snd);
+      try { Promise.resolve(snd.setParameters(prm)).then(done, done); } catch (e) { done(); }
     }
   }
 }
@@ -1667,6 +1733,7 @@ function isSending() {
 function applySend(broadcast = true) {
   const on = isSending();
   if (st.stream) st.stream.getAudioTracks().forEach((t) => { t.enabled = on; });
+  applyBitrates(); // full 510 kbps only while I can be heard
   updateMicBtn();
   if (broadcast) sendInfo();
   render();
@@ -1681,6 +1748,91 @@ function sendInfo(target) {
   st.sentStatus = payload.status;
   try { quiet(st.info.send(payload, target ? { target } : undefined)); } catch (e) {}
 }
+
+// ---------- call connection: hi-fi Opus and the graphics card's video encoder ----------
+// The Opus encoder takes its settings from the OTHER side's description (that's how WebRTC works:
+// the receiver says what it wants to get). So every offer/answer that comes in from a friend gets
+// these before it's applied, and my encoder sends: 510 kbps, real stereo, no DTX (the ends of words
+// aren't swallowed in quiet moments), constant bitrate. The friend's app does the same for me.
+// (Rewriting my own outgoing description is being shut off in Chromium and would race the library's
+// negotiation, so it's left alone.)
+const OPUS_HIFI = { maxaveragebitrate: '510000', stereo: '1', 'sprop-stereo': '1', usedtx: '0', cbr: '1' };
+function opusFmtp(params) {
+  const keep = String(params || '').split(';').map((s) => s.trim())
+    .filter((s) => s && !Object.prototype.hasOwnProperty.call(OPUS_HIFI, s.split('=')[0].trim().toLowerCase()));
+  return keep.concat(Object.keys(OPUS_HIFI).map((k) => k + '=' + OPUS_HIFI[k])).join(';');
+}
+function hifiSection(sec) {
+  if (!sec.length || !/^m=audio /.test(sec[0])) return sec;
+  const pts = [];
+  for (const l of sec) { const m = /^a=rtpmap:(\d+) opus\/48000/i.exec(l); if (m) pts.push(m[1]); }
+  if (!pts.length) return sec;
+  const out = sec.map((l) => {
+    const f = /^a=fmtp:(\d+)(?: (.*))?$/.exec(l);
+    return f && pts.includes(f[1]) ? 'a=fmtp:' + f[1] + ' ' + opusFmtp(f[2]) : l;
+  });
+  for (const pt of pts) {
+    if (out.some((l) => l.startsWith('a=fmtp:' + pt + ' '))) continue;
+    const i = out.findIndex((l) => l.startsWith('a=rtpmap:' + pt + ' '));
+    out.splice(i + 1, 0, 'a=fmtp:' + pt + ' ' + opusFmtp(''));
+  }
+  return out;
+}
+function hifiSdp(sdp) {
+  if (typeof sdp !== 'string' || !/ opus\/48000/i.test(sdp)) return sdp;
+  const eol = sdp.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  const out = []; let sec = [];
+  for (const l of sdp.split(eol)) {
+    if (l.startsWith('m=')) { out.push(...hifiSection(sec)); sec = []; }
+    sec.push(l);
+  }
+  out.push(...hifiSection(sec));
+  return out.join(eol);
+}
+// Video: if the graphics card can encode H.264 (NVENC / Quick Sync / AMD), put H.264 first, so
+// streams and the camera are encoded by the GPU instead of the CPU. All other codecs stay in the
+// list, so a friend without H.264 still connects on VP8/VP9.
+let gpuCodecs = null;
+(async () => {
+  try {
+    if (!window.RTCRtpReceiver || !RTCRtpReceiver.getCapabilities || !navigator.mediaCapabilities || !navigator.mediaCapabilities.encodingInfo) return;
+    const recv = RTCRtpReceiver.getCapabilities('video');
+    const send = RTCRtpSender.getCapabilities && RTCRtpSender.getCapabilities('video');
+    const isH264 = (c) => /^video\/h264$/i.test(c.mimeType);
+    if (!recv || !send || !send.codecs.some(isH264)) return;
+    const info = await navigator.mediaCapabilities.encodingInfo({
+      type: 'webrtc', video: { contentType: 'video/H264', width: 1920, height: 1080, bitrate: 6000000, framerate: 60 }
+    });
+    if (!info || !info.supported || !info.powerEfficient) return; // no hardware encoder — leave the default
+    const rank = (c) => (/packetization-mode=1/.test(c.sdpFmtpLine || '') ? 0 : 2) + (/profile-level-id=42e0/i.test(c.sdpFmtpLine || '') ? 0 : 1);
+    const h = recv.codecs.filter(isH264).sort((a, b) => rank(a) - rank(b));
+    if (h.length) gpuCodecs = h.concat(recv.codecs.filter((c) => !isH264(c)));
+  } catch (e) { gpuCodecs = null; }
+})();
+const codecSet = new WeakSet();
+function preferGpuCodec(pc) {
+  if (!gpuCodecs || typeof pc.getTransceivers !== 'function') return;
+  for (const t of pc.getTransceivers()) {
+    if (codecSet.has(t) || t.currentDirection === 'stopped' || typeof t.setCodecPreferences !== 'function') continue;
+    const kind = (t.sender && t.sender.track && t.sender.track.kind) || (t.receiver && t.receiver.track && t.receiver.track.kind);
+    if (kind !== 'video') continue;
+    try { t.setCodecPreferences(gpuCodecs); codecSet.add(t); } catch (e) {}
+  }
+}
+const BaseRTC = window.RTCPeerConnection;
+const HiFiPC = BaseRTC && class extends BaseRTC {
+  setRemoteDescription(d, ...rest) {
+    if (d && typeof d.sdp === 'string' && d.type !== 'rollback') {
+      try { d = { type: d.type, sdp: hifiSdp(d.sdp) }; } catch (e) {}
+    }
+    return super.setRemoteDescription(d, ...rest);
+  }
+  setLocalDescription(d, ...rest) {
+    if (!d || d.type !== 'rollback') preferGpuCodec(this);
+    return super.setLocalDescription(d, ...rest);
+  }
+  createOffer(...a) { preferGpuCodec(this); return super.createOffer(...a); }
+};
 
 // ---------- joining ----------
 async function onJoin(e) {
@@ -1731,6 +1883,7 @@ async function onJoin(e) {
       {
         appId: APP_ID,
         password: 'racia:' + code,
+        rtcPolyfill: HiFiPC || undefined,
         relayConfig: Array.isArray(st.lib.defaultRelayUrls)
           ? { urls: st.lib.defaultRelayUrls, warnOnRelayFailure: false }
           : { redundancy: 28, warnOnRelayFailure: false }
@@ -1759,7 +1912,11 @@ async function onJoin(e) {
 }
 
 function micConstraints(id) {
-  const c = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: { ideal: 1 } };
+  // Music mode: the browser's echo cancelling, noise suppression and auto-volume are off and the mic
+  // comes in stereo as it is. Otherwise: the usual voice processing.
+  const c = settings.music
+    ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } }
+    : { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: { ideal: 1 } };
   if (id) c.deviceId = { exact: id };
   return c;
 }
@@ -1884,6 +2041,7 @@ function addViewer(id, q) {
   const master = st.screen && st.screen.getVideoTracks()[0];
   if (!master || !st.room) return;
   const clone = master.clone();
+  if ('contentHint' in clone) clone.contentHint = master.contentHint;
   const ms = new MediaStream([clone].concat(st.screen.getAudioTracks()));
   const e = { clone, ms, q };
   st.viewerOut.set(id, e);
@@ -2027,9 +2185,11 @@ function audioTick() {
 setInterval(audioTick, 50);
 
 // ---------- microphone chain ----------
-// mic → [RNNoise] → proc ┬→ friends (outgoing track)
-//                        ├→ level meter
-//                        └→ monitor → your speakers (mic test only)
+// voice: mic → high-pass 80 Hz → [RNNoise] → compressor → proc ┬→ friends (outgoing track)
+// music: mic ───────────────────────────────────────────→ proc ├→ level meter
+//                                                              └→ monitor → your speakers (mic test only)
+// The high-pass cuts rumble and boom (desk knocks, breath on the mic, fan hum); the compressor
+// evens out quiet and loud speech so friends don't ride the volume slider.
 async function loadRnnoise(ctx) {
   const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); };
   let bin = null;
@@ -2044,14 +2204,19 @@ async function loadRnnoise(ctx) {
 }
 function buildGraph(ctx) {
   const source = ctx.createMediaStreamSource(st.mic);
+  const hpf = ctx.createBiquadFilter();
+  hpf.type = 'highpass'; hpf.frequency.value = 80; hpf.Q.value = Math.SQRT1_2;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -26; comp.knee.value = 12; comp.ratio.value = 3.5;
+  comp.attack.value = 0.004; comp.release.value = 0.18;
   const proc = ctx.createGain();
   const monitor = ctx.createGain(); monitor.gain.value = 0;
   const dest = ctx.createMediaStreamDestination();
-  source.connect(proc);
+  comp.connect(proc);
   proc.connect(dest);
   proc.connect(monitor); monitor.connect(ctx.destination);
   const an = ctx.createAnalyser(); an.fftSize = 512; proc.connect(an);
-  return { source, proc, monitor, dest, rnnoise: null, an: { an, src: proc, buf: new Float32Array(an.fftSize), lvl: 0 } };
+  return { source, hpf, comp, proc, monitor, dest, rnnoise: null, an: { an, src: proc, buf: new Float32Array(an.fftSize), lvl: 0 } };
 }
 function setupPipeline() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -2059,6 +2224,7 @@ function setupPipeline() {
     if (!st.ctx || st.ctx.sampleRate !== 48000 || !st.ctx.audioWorklet) throw new Error('no 48k');
     const g = buildGraph(st.ctx);
     st.audio = g; st.localAn = g.an; st.stream = g.dest.stream;
+    routeNS();
     quiet(st.ctx.resume());
     st.nsState = 'loading';
     loadRnnoise(st.ctx).then((node) => {
@@ -2073,6 +2239,7 @@ function setupPipeline() {
       st.ctx = new AC(); quiet(st.ctx.resume());
       const g = buildGraph(st.ctx);
       st.audio = g; st.localAn = g.an; st.stream = g.dest.stream;
+      routeNS();
     } catch (e) {
       st.audio = null; st.stream = st.mic;
       try { st.localAn = st.ctx ? mkAn(st.ctx.createMediaStreamSource(st.mic)) : null; } catch (e2) { st.localAn = null; }
@@ -2082,21 +2249,36 @@ function setupPipeline() {
 }
 function routeNS() {
   const g = st.audio; if (!g) return;
-  try { g.source.disconnect(); } catch (e) {}
-  if (g.rnnoise) { try { g.rnnoise.disconnect(); } catch (e) {} }
-  if (settings.ns && g.rnnoise) { g.source.connect(g.rnnoise); g.rnnoise.connect(g.proc); }
-  else g.source.connect(g.proc);
+  for (const n of [g.source, g.hpf, g.rnnoise]) if (n) { try { n.disconnect(); } catch (e) {} }
+  if (settings.music) g.source.connect(g.proc);
+  else {
+    g.source.connect(g.hpf);
+    if (settings.ns && g.rnnoise) { g.hpf.connect(g.rnnoise); g.rnnoise.connect(g.comp); }
+    else g.hpf.connect(g.comp);
+  }
   updateNs();
 }
 function updateNs() {
   const btn = $('#nsBtn'), txt = $('#nsState');
   const failed = st.nsState === 'failed';
-  btn.disabled = failed;
-  btn.setAttribute('aria-checked', String(settings.ns && !failed));
-  txt.textContent = failed ? (APP ? 'Не загрузился — проверь интернет и перезапусти Walkie-Talkie. Пока работает только слабый встроенный фильтр' : 'Не загрузился в этом браузере — работает только слабый встроенный фильтр')
+  btn.disabled = failed || settings.music;
+  btn.setAttribute('aria-checked', String(settings.ns && !failed && !settings.music));
+  txt.textContent = settings.music ? 'Выключен в музыкальном режиме'
+    : failed ? (APP ? 'Не загрузился — проверь интернет и перезапусти Walkie-Talkie. Пока работает только слабый встроенный фильтр' : 'Не загрузился в этом браузере — работает только слабый встроенный фильтр')
     : !settings.ns ? 'Выключен'
     : st.nsState === 'loading' ? 'Загружается…'
     : 'Включён: фоновый шум вырезается';
+  const mb = $('#musicBtn');
+  mb.setAttribute('aria-checked', String(!!settings.music));
+  $('#musicState').textContent = settings.music
+    ? 'Включён: чистый звук микрофона в стерео, без шумодава, эхоподавления и автогромкости. Лучше в наушниках'
+    : 'Для музыки и инструментов: выключает всю обработку голоса';
+}
+// Music mode on/off: the browser's processing is set when the mic is opened, so the mic is reopened.
+function toggleMusic() {
+  settings.music = !settings.music; saveSettings();
+  routeNS();
+  if (st.inCall) reopenMic();
 }
 function stopAudio() {
   if (st.audio && st.audio.rnnoise) { try { st.audio.rnnoise.port.postMessage('destroy'); } catch (e) {} }
@@ -2135,11 +2317,16 @@ async function refreshDevices() {
 }
 async function switchMic(id) {
   settings.micId = id; saveSettings();
+  reopenMic();
+}
+// Opens the mic again (another device, or music mode changed) and puts it at the start of the chain.
+async function reopenMic() {
   if (!st.inCall || !st.mic) return;
+  const seq = st.micSeq = (st.micSeq || 0) + 1;
   let s;
-  try { s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(id), video: false }); }
+  try { s = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(settings.micId), video: false }); }
   catch (e) { flash('Не получилось включить этот микрофон.'); refreshDevices(); return; }
-  if (!st.inCall) { s.getTracks().forEach((t) => t.stop()); return; }
+  if (!st.inCall || seq !== st.micSeq) { s.getTracks().forEach((t) => t.stop()); return; }
   const old = st.mic;
   if (st.audio && st.ctx) {
     // Only the start of the chain changes; friends keep getting the same outgoing track.
@@ -2405,10 +2592,11 @@ async function toggleScreen() {
   if (!navigator.mediaDevices.getDisplayMedia) { flash('Этот браузер не умеет показывать экран. Попробуй Chrome или Edge на компьютере.'); return; }
   st.screenBusy = true; updateTools();
   try {
-    let s;
+    let s, kind = '';
     if (APP) {
       const pick = await pickSource();
       if (!pick) return; // closed the picker
+      kind = /^window/.test(pick.id) ? 'window' : 'screen';
       await APP.chooseSource(pick.id, pick.audio);
       s = await navigator.mediaDevices.getDisplayMedia({ video: videoQ(settings.streamRes, settings.streamFps), audio: pick.audio });
     } else {
@@ -2420,6 +2608,12 @@ async function toggleScreen() {
       }
     }
     if (!st.inCall || !st.room) { s.getTracks().forEach((t) => t.stop()); return; }
+    // Screen / game: keep the frame rate, drop resolution when the network sags (no freezes).
+    // Window / document: keep the resolution, so text stays sharp.
+    const vt = s.getVideoTracks()[0];
+    if (!kind) { const ds = vt && vt.getSettings ? vt.getSettings().displaySurface : ''; kind = ds === 'window' || ds === 'browser' ? 'window' : 'screen'; }
+    st.screenKind = kind;
+    if (vt && 'contentHint' in vt) vt.contentHint = kind === 'window' ? 'detail' : 'motion';
     st.screen = s; st.watchers.clear();
     if (hasFlag('noSound', st.myId)) s.getAudioTracks().forEach((t) => { t.enabled = false; });
     s.getVideoTracks().forEach((t) => t.addEventListener('ended', () => { if (st.screen === s) stopScreen(true); }));
@@ -2556,18 +2750,28 @@ function addVideo(id, kind, stream, local) {
   if (v0 && v0.stream === stream) return;
   if (v0) removeVideo(id, kind);
   const fig = document.createElement('figure');
-  fig.className = 'vtile ' + kind + (local && kind === 'camera' ? ' mirror' : '');
-  const video = document.createElement('video');
-  video.autoplay = true; video.playsInline = true;
-  video.muted = local || kind === 'camera';
-  video.srcObject = stream;
-  video.addEventListener('dblclick', () => goFull(fig));
+  // My own stream isn't played back to me: a still card instead. Showing it live makes an endless
+  // mirror when the whole screen is shared and makes the graphics card draw every frame twice.
+  const self = local && kind === 'screen';
+  fig.className = 'vtile ' + kind + (local && kind === 'camera' ? ' mirror' : '') + (self ? ' self' : '');
+  let video = null, ph = null;
+  if (self) {
+    ph = document.createElement('div'); ph.className = 'self-ph';
+    ph.innerHTML = '<div class="ph-ico">' + ico('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 28) + '</div>' +
+      '<div class="t">Ты демонстрируешь экран</div><div class="s"></div><div class="s2"></div>';
+  } else {
+    video = document.createElement('video');
+    video.autoplay = true; video.playsInline = true;
+    video.muted = local || kind === 'camera';
+    video.srcObject = stream;
+    video.addEventListener('dblclick', () => goFull(fig));
+  }
 
   const bar = document.createElement('div'); bar.className = 'vbar';
   const cap = document.createElement('div'); cap.className = 'vcap';
   cap.innerHTML = (kind === 'screen' ? '<span class="live">В эфире</span>' : '') + '<span class="cn"></span>' + (kind === 'screen' ? '<span class="qinfo"></span>' : '');
   const ctl = document.createElement('div'); ctl.className = 'vctl';
-  const v = { id, kind, stream, fig, video, cap, local };
+  const v = { id, kind, stream, fig, video, cap, local, ph };
 
   if (kind === 'screen' && !local) {
     // Stream sound: mute button + slider, separate from the friend's voice.
@@ -2596,15 +2800,19 @@ function addVideo(id, kind, stream, local) {
     qb.addEventListener('click', () => openQualityMenu(qb, id, true));
     ctl.append(qb, stop);
   }
-  const fs = document.createElement('button');
-  fs.type = 'button'; fs.className = 'vbtn'; fs.innerHTML = FS; fs.setAttribute('aria-label', 'На весь экран');
-  fs.addEventListener('click', () => goFull(fig));
-  ctl.append(fs);
+  if (video) {
+    const fs = document.createElement('button');
+    fs.type = 'button'; fs.className = 'vbtn'; fs.innerHTML = FS; fs.setAttribute('aria-label', 'На весь экран');
+    fs.addEventListener('click', () => goFull(fig));
+    ctl.append(fs);
+  }
   bar.append(cap, ctl);
-  fig.append(video, bar);
+  fig.append(video || ph, bar);
   placeTile(fig, kind);
-  if (!local && canSink() && settings.outId) quiet(video.setSinkId(settings.outId));
-  quiet(video.play());
+  if (video) {
+    if (!local && canSink() && settings.outId) quiet(video.setSinkId(settings.outId));
+    quiet(video.play());
+  }
   vids.set(key, v);
   stream.addEventListener('removetrack', () => {
     const cur = vids.get(key);
@@ -2626,8 +2834,10 @@ function removeVideo(id, kind) {
   const key = id + ':' + kind;
   const v = vids.get(key); if (!v) return;
   if (document.fullscreenElement === v.fig) quiet(document.exitFullscreen());
-  try { v.video.pause(); } catch (e) {}
-  v.video.srcObject = null;
+  if (v.video) {
+    try { v.video.pause(); } catch (e) {}
+    v.video.srcObject = null;
+  }
   v.fig.remove();
   vids.delete(key);
   updateStage();
@@ -2833,6 +3043,14 @@ function render() {
     const cn = v.cap.querySelector('.cn');
     if (v.kind === 'screen') cn.textContent = v.local ? 'Твой стрим · ' + viewersText(st.watchers.size) : nameOf(v.id);
     else cn.textContent = v.local ? 'Ты' : nameOf(v.id);
+    if (v.ph) {
+      const n = st.watchers.size;
+      const s = v.ph.querySelector('.s'), s2 = v.ph.querySelector('.s2');
+      const t1 = n ? 'Смотрят: ' + viewersText(n) : 'Пока никто не смотрит';
+      const t2 = (st.screenKind === 'window' ? 'Окно — приоритет чёткости текста' : 'Экран — приоритет плавности') + ' · превью выключено, чтобы не нагружать видеокарту';
+      if (v.t1 !== t1) { v.t1 = t1; s.textContent = t1; } // set only on change (the English layer swaps the text)
+      if (v.t2 !== t2) { v.t2 = t2; s2.textContent = t2; }
+    }
   }
   renderCards();
 }
@@ -2926,6 +3144,22 @@ function openQualityMenu(anchor, id, mine) {
 }
 
 // ---------- connection: ping, losses, chart ----------
+// My packets lost on the way to a friend → my video to that friend gets cheaper. Checked every 2 s:
+// more than 5% lost → video −20% (down to a fifth of the normal rate); under 2% for 6 s → +10% back.
+// Voice and stream sound are never lowered (they also have priority over video in the network).
+function adaptVideo(n, sent, lost) {
+  const now = performance.now();
+  if (!n.ow || sent < n.ow.sent || lost < n.ow.lost) { n.ow = { sent, lost, at: now }; return; }
+  if (now - n.ow.at < 2000) return;
+  const ds = sent - n.ow.sent, dl = lost - n.ow.lost;
+  n.ow = { sent, lost, at: now };
+  if (ds < 50) return; // too few packets to judge
+  n.outLoss = Math.min(100, dl / ds * 100);
+  const vf = n.vf || 1;
+  if (n.outLoss > 5) { n.vf = Math.max(0.2, vf * 0.8); n.good = 0; }
+  else if (n.outLoss < 2 && vf < 1) { n.good = (n.good || 0) + 1; if (n.good >= 3) { n.vf = Math.min(1, vf * 1.1); n.good = 0; } }
+  else n.good = 0;
+}
 async function netTick() {
   if (!st.inCall || !st.room || typeof st.room.getPeers !== 'function' || st.netBusy) return;
   st.netBusy = true;
@@ -2939,11 +3173,14 @@ async function netTick() {
       if (!m || m.cut || !pc || typeof pc.getStats !== 'function') continue;
       let rep;
       try { rep = await pc.getStats(); } catch (e) { continue; }
-      let pairId = null, rtt = null, inA = null, outA = null;
+      let pairId = null, rtt = null, inA = null, outA = null, pSent = 0, pLost = 0;
       const sources = new Map();
       rep.forEach((r) => {
         if (r.type === 'transport' && r.selectedCandidatePairId) pairId = r.selectedCandidatePairId;
         if (r.type === 'media-source') sources.set(r.id, r.trackIdentifier);
+        // What I send to this friend: packets out, and how many of them the friend reports lost.
+        if (r.type === 'outbound-rtp') pSent += r.packetsSent || 0;
+        if (r.type === 'remote-inbound-rtp') pLost += Math.max(0, r.packetsLost || 0);
       });
       rep.forEach((r) => {
         if (r.type === 'candidate-pair' && typeof r.currentRoundTripTime === 'number' &&
@@ -2954,7 +3191,7 @@ async function netTick() {
           if (!outA || (mic && tid === mic.id)) outA = r;
         }
       });
-      const n = st.net.get(id) || { hist: [], rtt: null, loss: 0, jitter: 0, kbps: 0 };
+      const n = st.net.get(id) || { hist: [], rtt: null, loss: 0, jitter: 0, kbps: 0, outLoss: 0, vf: 1 };
       n.rtt = rtt;
       n.hist.push(rtt); if (n.hist.length > 60) n.hist.shift();
       if (inA) {
@@ -2968,6 +3205,7 @@ async function netTick() {
         if (n.pout && t > n.pout.t) { n.kbps = (b - n.pout.b) * 8 / (t - n.pout.t); myKbps += n.kbps; kbN++; }
         n.pout = { b, t };
       }
+      adaptVideo(n, pSent, pLost);
       st.net.set(id, n);
     }
     for (const id of Array.from(st.net.keys())) if (!members.has(id)) st.net.delete(id);
@@ -3025,8 +3263,11 @@ function renderNet() {
     li.innerHTML = '<i></i><b translate="no"></b><span></span>';
     li.querySelector('i').style.background = col;
     li.querySelector('b').textContent = nameOf(id);
+    const ol = n.outLoss || 0;
     li.querySelector('span').textContent = (typeof n.rtt === 'number' ? Math.round(n.rtt) + ' мс' : '—') +
-      ' · потери ' + n.loss.toFixed(n.loss < 10 ? 1 : 0) + '% · джиттер ' + Math.round(n.jitter) + ' мс';
+      ' · потери ' + n.loss.toFixed(n.loss < 10 ? 1 : 0) + '% · джиттер ' + Math.round(n.jitter) + ' мс' +
+      ' · исходящие потери ' + ol.toFixed(ol < 10 ? 1 : 0) + '%' +
+      (n.vf && n.vf < 0.99 ? ' · видео −' + Math.round((1 - n.vf) * 100) + '%' : '');
     ul.appendChild(li);
   }
   if (!i) { const li = document.createElement('li'); li.textContent = 'Когда в канале появятся друзья, здесь будет пинг до каждого.'; ul.appendChild(li); }
@@ -3092,8 +3333,13 @@ function tick() {
       if (v.kind === 'camera') v.fig.classList.toggle('speaking', (levels.get(v.id) || 0) > 0.12);
       else {
         const q = v.cap.querySelector('.qinfo');
-        const h = v.video.videoHeight;
-        const t = h ? h + 'p' : '';
+        let t = '';
+        if (v.video) { const h = v.video.videoHeight; t = h ? h + 'p' : ''; }
+        else if (v.local && st.screen && st.screen.getVideoTracks()[0]) {
+          // my own stream: what's actually being captured, e.g. 1080p60
+          const s = st.screen.getVideoTracks()[0].getSettings();
+          t = s.height ? s.height + 'p' + (s.frameRate ? Math.round(s.frameRate) : '') : '';
+        }
         if (q && q.textContent !== t) q.textContent = t;
       }
     }
@@ -3205,6 +3451,7 @@ $('#nsBtn').addEventListener('click', () => {
   if (st.nsState === 'failed') return;
   settings.ns = !settings.ns; saveSettings(); routeNS(); updateNs();
 });
+$('#musicBtn').addEventListener('click', toggleMusic);
 $('#duckBtn').addEventListener('click', () => { settings.duck = !settings.duck; saveSettings(); updateSettingsUI(); });
 $('#duckLevel').addEventListener('input', (e) => {
   settings.duckLevel = Math.max(0, Math.min(0.8, e.target.value / 100)); saveSettings();
