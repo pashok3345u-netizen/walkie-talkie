@@ -242,7 +242,22 @@
     // ---------- join a friend ----------
     'В голосовом канале': 'In a voice channel', 'Вы в одном канале': 'You’re in the same channel', 'Зайти': 'Join',
     'Голосовой канал': 'Voice channel', 'Друзья могут заходить ко мне без приглашения': 'Friends can join me without an invitation',
-    'Друзья видят, в каком ты канале, и заходят одной кнопкой. Выключишь — увидят только, что ты в канале и сколько там людей.': 'Friends see which channel you’re in and join with one button. Turn it off and they only see that you’re in a channel and how many people are there.'
+    'Друзья видят, в каком ты канале, и заходят одной кнопкой. Выключишь — увидят только, что ты в канале и сколько там людей.': 'Friends see which channel you’re in and join with one button. Turn it off and they only see that you’re in a channel and how many people are there.',
+    // ---------- games and my own status ----------
+    'Показывать, во что я играю': 'Show what I’m playing', 'Друзья и люди в звонке видят «Играет в …»': 'Friends and people in your call see “Playing …”',
+    'Играет в': 'Playing', 'только что': 'just now', 'Свой статус': 'Custom status', 'Игры': 'Games', 'Свои игры': 'Your games',
+    'Например: 🎮 катаю рейтинг, не звать': 'For example: 🎮 ranked grind, don’t call', 'Сколько держать статус': 'How long to keep the status',
+    '1 час': '1 hour', 'До завтра': 'Until tomorrow', 'Навсегда': 'Forever', 'навсегда': 'forever', 'до завтра': 'until tomorrow',
+    'Сохранить статус': 'Save status', 'Статус сохранён': 'Status saved', 'Статус убран': 'Status cleared', 'Сейчас:': 'Now:',
+    'Свой статус видят друзья и люди в звонке, пока ты в сети.': 'Friends and people in your call see your status while you’re online.',
+    'Друзья и люди в звонке видят «Играет в …». Игра узнаётся по запущенной программе раз в 20 секунд.': 'Friends and people in your call see “Playing …”. The game is recognised by its running program, every 20 seconds.',
+    '(никому не показывается)': '(not shown to anyone)', 'Сейчас игра не найдена.': 'No game running right now.',
+    'Убрать игру': 'Remove the game', 'Добавить свою игру': 'Add your own game', 'Добавить': 'Add',
+    'Файл игры, например game.exe': 'Game file, e.g. game.exe', 'Название, например Hollow Knight': 'Name, e.g. Hollow Knight',
+    'Ищу открытые окна…': 'Looking for open windows…',
+    'Запусти игру и выбери её окно — или впиши имя файла сам.': 'Start the game and pick its window — or type the file name yourself.',
+    'Впиши имя файла игры — его видно в Диспетчере задач, вкладка «Подробности».': 'Type the game’s file name — Task Manager shows it on the “Details” tab.',
+    'Нужны и файл игры, и название': 'Both the game file and a name are needed', 'Игра добавлена': 'Game added'
   };
   const map = new Map(Object.entries(EN));
   const CYR = /[А-Яа-яЁё]/;
@@ -293,6 +308,10 @@
     [/^Переслано от (.+)$/, (m) => 'Forwarded from ' + m[1]],
     [/^Переслано: (.+)$/, (m) => 'Forwarded to ' + m[1]],
     [/^Зайти в канал (.+)$/, (m) => 'Join channel ' + m[1]],
+    [/^(\d+) мин$/, (m) => m[1] + ' min'],
+    [/^(\d+) ч$/, (m) => m[1] + ' h'],
+    [/^(\d+) ч (\d+) мин$/, (m) => m[1] + ' h ' + m[2] + ' min'],
+    [/^до (.+)$/, (m) => 'until ' + m[1]],
     [/^Нет ответа: (.+)$/, (m) => 'No answer: ' + m[1]],
     [/^Звонок принят: (.+)$/, (m) => 'Call answered: ' + m[1]],
     [/^Пропущенный звонок: (.+)$/, (m) => 'Missed call: ' + m[1]],

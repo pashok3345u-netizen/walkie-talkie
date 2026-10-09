@@ -122,6 +122,7 @@
     live: new Map(), liveKnown: new Set(), liveWatch: new Map(),   // friends' live/<uid> (what their app can do)
     callUnsub: null, out: null, ring: null,   // my outgoing call; the incoming one on screen
     roomSent: '', roomAt: 0, roomTimer: 0,    // my channel as friends last got it (live/<me>.room)
+    actSent: '', noteDur: 'tomorrow', addGame: null,   // my game & status as friends last got them; the forms
     ringLog: new Map(), silenced: new Map(), missedAt: new Map()
   };
   const peerWatch = new Map(); // account uid -> Set(peer ids in my call)
@@ -172,7 +173,7 @@
     for (const u of S.liveWatch.values()) { try { u(); } catch (e) {} }
     S.liveWatch.clear(); S.live.clear(); S.liveKnown.clear();
     endOutgoing(); closeRing();
-    clearInterval(S.presTimer); clearTimeout(S.v2Timer); clearTimeout(S.roomTimer); S.roomSent = '';
+    clearInterval(S.presTimer); clearTimeout(S.v2Timer); clearTimeout(S.roomTimer); S.roomSent = ''; S.actSent = '';
     S.started = false; S.isAdmin = false; S.v2 = false;
     S.friends.clear(); S.chats.clear(); S.blocked.clear(); S.profiles.clear(); S.presence.clear();
     S.chatWith = null; S.msgs = [];
@@ -307,6 +308,7 @@
     return p.state;
   }
   window.addEventListener('racia-call', () => { writePresence(); syncRoom(); });
+  window.addEventListener('racia-activity', () => { writeActivity(); renderAll(); });
   window.addEventListener('racia-prefs', () => renderAll());
   window.addEventListener('beforeunload', () => writePresence(true));
 
@@ -594,10 +596,10 @@
     if (!S.v2) return;
     try {
       const t0 = Date.now();
-      // the channel goes right away too, so whatever a crash left behind is wiped
-      const room = roomNow();
-      await S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now(), room }, { mergeFields: ['v', 'at', 'room'] });
-      S.roomSent = JSON.stringify(room); S.roomAt = Date.now();
+      // the channel, game and status go right away too, so whatever a crash left behind is wiped
+      const room = roomNow(), act = activityNow();
+      await S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now(), room, game: act.game, note: act.note }, { mergeFields: ['v', 'at', 'room', 'game', 'note'] });
+      S.roomSent = JSON.stringify(room); S.roomAt = Date.now(); S.actSent = act.key;
       const t1 = Date.now();
       const at = ms((await S.F.D.getDoc(d('live', myUid()))).get('at'));
       if (at) { S.skew = at - (t0 + t1) / 2; S.skewKnown = true; }
@@ -665,6 +667,50 @@
     const ci = Call.info();
     if (ci.inCall && ci.code === r.code) return h('span', { class: 's sx-same' }, 'Вы в одном канале');
     return button('Зайти', () => joinCode(r.code), 'btn-primary');
+  }
+
+  // ---------- "Playing …" and my own status: live/<me>.game / .note ----------
+  // What the call page found (RaciaCall.activity) goes to friends. Times go by the server's clock.
+  function activityNow() {
+    const a = Call.activity ? Call.activity() : {};
+    const ts = (t) => S.F.D.Timestamp.fromMillis(t);
+    // "since" a bit early: the server refuses a start time later than its own clock
+    const game = a.game ? { n: a.game.n, since: S.skewKnown ? ts(Math.min(a.game.since, Date.now()) + S.skew - 30000) : now() } : null;
+    const note = a.note ? Object.assign({ t: a.note.t }, a.note.until ? { until: ts(a.note.until + S.skew) } : {}) : null;
+    return { game, note, key: JSON.stringify([a.game ? a.game.n + '@' + a.game.since : '', a.note ? a.note.t + '@' + a.note.until : '']) };
+  }
+  function writeActivity() {
+    if (!S.v2 || !S.me) return;
+    const x = activityNow();
+    if (x.key === S.actSent) return;
+    S.actSent = x.key;
+    S.F.D.setDoc(d('live', myUid()), { v: LIVE_V, at: now(), game: x.game, note: x.note }, { mergeFields: ['v', 'at', 'game', 'note'] })
+      .catch(() => { if (S.actSent === x.key) S.actSent = ''; });
+  }
+  // A friend's game and status — like the channel, only while they're online.
+  function gameOf(uid) {
+    if (uid === myUid()) return Call.activity ? Call.activity().game : null;
+    const g = (S.live.get(uid) || {}).game;
+    if (!g || typeof g.n !== 'string' || !g.n || !isFriend(uid) || statusOf(uid) === 'offline') return null;
+    return { n: g.n.slice(0, 40), since: (ms(g.since) || serverNow()) - S.skew };
+  }
+  function noteOf(uid) {
+    if (uid === myUid()) { const a = Call.activity ? Call.activity() : {}; return a.note ? a.note.t : ''; }
+    const n = (S.live.get(uid) || {}).note;
+    if (!n || typeof n.t !== 'string' || !n.t || !isFriend(uid) || statusOf(uid) === 'offline') return '';
+    if (n.until && ms(n.until) <= serverNow()) return '';
+    return n.t.slice(0, 60);
+  }
+  function fmtDur(t) {
+    const m = Math.floor(Math.max(0, t) / 60000);
+    if (m < 1) return 'только что';
+    if (m < 60) return m + ' мин';
+    const hh = Math.floor(m / 60);
+    return hh + ' ч' + (m % 60 ? ' ' + (m % 60) + ' мин' : '');
+  }
+  function gameLine(uid) {
+    const g = gameOf(uid); if (!g) return null;
+    return h('span', { class: 'sx-game' }, h('span', {}, '🎮 '), h('span', {}, 'Играет в'), ' ', h('span', { translate: 'no' }, g.n), ' · ', h('span', {}, fmtDur(Date.now() - g.since)));
   }
 
   // ---------- calls: one document per pair of friends, calls/<pair> ----------
@@ -1234,7 +1280,8 @@
       incoming.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Заявки в друзья · ' + incoming.length),
         h('ul', { class: 'sx-list' }, incoming.map((u) => personRow(u, [button('Принять', () => acceptFriend(u), 'btn-primary'), button('Отклонить', () => removeFriend(u))])))) : null,
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Друзья · ' + friends.length + (friends.length ? ' · в сети ' + online : '')),
-        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [joinBtn(u), callBtn(u), button('Написать', () => openChat(u)), friendMenuBtn(u)], null, voiceLine(u))))
+        friends.length ? h('ul', { class: 'sx-list' }, friends.map((u) => personRow(u, [joinBtn(u), callBtn(u), button('Написать', () => openChat(u)), friendMenuBtn(u)],
+          noteOf(u) ? h('span', { translate: 'no' }, noteOf(u)) : null, [voiceLine(u), gameLine(u)])))
           : h('p', { class: 's' }, 'Пока никого. Найди друга по тегу — тег виден у него в профиле.')),
       outgoing.length ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Ты отправил заявки'),
         h('ul', { class: 'sx-list' }, outgoing.map((u) => personRow(u, button('Отменить', () => removeFriend(u)))))) : null,
@@ -1441,6 +1488,7 @@
           [['ru', 'Русский'], ['en', 'English']].map(([v, t]) => h('button', { type: 'button', role: 'radio', 'data-v': v, 'aria-checked': String(Call.prefs().lang === v) }, t)))),
       h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Статус'), statusSeg,
         h('p', { class: 's' }, 'Через 10 минут без действий станешь «неактивен», а когда Walkie-Talkie закрыта — «не в сети».')),
+      activitySection(),
       S.v2 ? h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Голосовой канал'),
         switchRow('Друзья могут заходить ко мне без приглашения',
           'Друзья видят, в каком ты канале, и заходят одной кнопкой. Выключишь — увидят только, что ты в канале и сколько там людей.',
@@ -1450,6 +1498,90 @@
         h('div', { class: 'sx-acct-row' }, button('Скопировать мой тег', () => copyText('@' + S.me.tag, 'Тег скопирован')), button('Выйти из аккаунта', signOut))),
       adminBox);
   }
+  // ----- profile tab: my own status and games -----
+  const NOTE_EMOJI = ['🎮', '🎧', '💤', '📚', '🍕', '🔥', '😎', '🚫'];
+  // windows that are never a game (and our own)
+  const NOT_GAMES = new Set(['explorer', 'applicationframehost', 'textinputhost', 'systemsettings', 'shellexperiencehost', 'searchhost',
+    'startmenuexperiencehost', 'lockapp', 'electron', 'walkietalkie', 'racia', 'nvidia overlay', 'gamebar']);
+  function untilFor(kind) {
+    if (kind === '1h') return Date.now() + 3600000;
+    if (kind === 'tomorrow') { const t = new Date(); t.setHours(24, 0, 0, 0); return t.getTime(); }
+    return 0;
+  }
+  function untilText(t) {
+    const x = new Date(t);
+    if (x.toDateString() === new Date().toDateString()) return 'до ' + timeFmt.format(x);
+    return x.getHours() === 0 && x.getMinutes() === 0 ? 'до завтра' : 'до ' + dayFmt.format(x) + ' ' + timeFmt.format(x);
+  }
+  const cleanTitle = (t) => String(t || '').split(/ [-–—|] /)[0].replace(/\s+/g, ' ').trim().slice(0, 40);
+  async function openAddGame() {
+    S.addGame = { busy: true, apps: null }; renderHub();
+    let list = null;
+    try { list = await Call.windows(); } catch (e) {}
+    if (!S.addGame) return;
+    S.addGame = { busy: false, apps: Array.isArray(list) ? list.filter((x) => x.n && x.t && !NOT_GAMES.has(x.n)).slice(0, 40) : null };
+    renderHub();
+  }
+  function activitySection() {
+    const a = Call.activity ? Call.activity() : null;
+    if (!a) return null;
+    // my own status
+    const input = h('input', { type: 'text', id: 'sxNote', maxlength: '60', placeholder: 'Например: 🎮 катаю рейтинг, не звать', value: a.note ? a.note.t : '', autocomplete: 'off' });
+    const emo = h('div', { class: 'sx-emo' }, NOTE_EMOJI.map((e) => h('button', { type: 'button', 'aria-label': e, onclick: () => {
+      const s = input.selectionStart ?? input.value.length, en = input.selectionEnd ?? s;
+      input.value = (input.value.slice(0, s) + e + input.value.slice(en)).slice(0, 60);
+      input.focus(); input.setSelectionRange(s + e.length, s + e.length);
+    } }, e)));
+    const dur = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Сколько держать статус' },
+      [['1h', '1 час'], ['tomorrow', 'До завтра'], ['forever', 'Навсегда']].map(([v, t]) =>
+        h('button', { type: 'button', role: 'radio', 'aria-checked': String(S.noteDur === v), onclick: () => { S.noteDur = v; renderHub(); } }, t)));
+    const save = button('Сохранить статус', () => {
+      const t = input.value.replace(/\s+/g, ' ').trim();
+      Call.setNote(t, t ? untilFor(S.noteDur) : 0);
+      toast(t ? 'Статус сохранён' : 'Статус убран');
+    }, 'btn-primary');
+    const clear = a.note ? button('Убрать', () => { input.value = ''; Call.setNote(''); toast('Статус убран'); }) : null;
+    const cur = a.note
+      ? h('p', { class: 's' }, h('span', {}, 'Сейчас:'), ' ', h('span', { translate: 'no' }, '«' + a.note.t + '»'), ' · ', h('span', {}, a.note.until ? untilText(a.note.until) : 'навсегда'))
+      : h('p', { class: 's' }, 'Свой статус видят друзья и люди в звонке, пока ты в сети.');
+    // games
+    const show = switchRow('Показывать, во что я играю', 'Друзья и люди в звонке видят «Играет в …». Игра узнаётся по запущенной программе раз в 20 секунд.', a.showGame, (on) => Call.setShowGame(on));
+    const found = a.found
+      ? h('p', { class: 's' }, h('span', {}, 'Сейчас:'), ' ', h('span', {}, '🎮 '), h('span', {}, 'Играет в'), ' ', h('span', { translate: 'no' }, a.found.n), ' · ', h('span', {}, fmtDur(Date.now() - a.found.since)),
+        a.showGame ? null : h('span', {}, ' (никому не показывается)'))
+      : h('p', { class: 's' }, 'Сейчас игра не найдена.');
+    const games = a.games;
+    const list = games.length ? h('ul', { class: 'sx-list' }, games.map((g, i) => h('li', { class: 'sx-gamerow' },
+      h('span', { translate: 'no' }, h('b', {}, g.n), ' ', h('span', { class: 's' }, g.exe + '.exe')),
+      h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Убрать игру', title: 'Убрать игру', html: I.close, onclick: () => { Call.setGames(games.filter((x, j) => j !== i)); renderHub(); } })))) : null;
+    const ag = S.addGame;
+    let adder;
+    if (!ag) adder = button('Добавить свою игру', openAddGame);
+    else {
+      const exe = h('input', { type: 'text', id: 'sxGameExe', placeholder: 'Файл игры, например game.exe', maxlength: '68', spellcheck: 'false', autocomplete: 'off' });
+      const nm = h('input', { type: 'text', id: 'sxGameName', placeholder: 'Название, например Hollow Knight', maxlength: '40', autocomplete: 'off' });
+      const apps = ag.apps && ag.apps.length ? ag.apps : null;
+      adder = h('div', { class: 'sx-addgame' },
+        h('p', { class: 's' }, ag.busy ? 'Ищу открытые окна…' : apps ? 'Запусти игру и выбери её окно — или впиши имя файла сам.' : 'Впиши имя файла игры — его видно в Диспетчере задач, вкладка «Подробности».'),
+        apps ? h('div', { class: 'sx-apps' }, apps.map((x) => h('button', { type: 'button', class: 'sx-app', onclick: () => { exe.value = x.n + '.exe'; nm.value = cleanTitle(x.t); nm.focus(); } },
+          h('span', { translate: 'no' }, x.t), h('span', { class: 's', translate: 'no' }, x.n + '.exe')))) : null,
+        h('div', { class: 'sx-acct-row' }, exe, nm),
+        h('div', { class: 'sx-acct-row' }, button('Добавить', () => {
+          const e = exe.value.trim().toLowerCase().replace(/\.exe$/, ''), n = nm.value.replace(/\s+/g, ' ').trim();
+          if (!e || !n) { toast('Нужны и файл игры, и название'); return; }
+          Call.setGames(games.filter((g) => g.exe !== e).concat([{ exe: e, n }]));
+          S.addGame = null; exe.value = ''; nm.value = '';
+          toast('Игра добавлена'); renderHub();
+        }, 'btn-primary'), button('Отмена', () => { S.addGame = null; renderHub(); })));
+    }
+    return [
+      h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Свой статус'),
+        input, emo, dur, h('div', { class: 'sx-acct-row' }, save, clear), cur),
+      h('section', { class: 'sx-sec' }, h('h3', { class: 'lbl' }, 'Игры'), show, found,
+        games.length ? h('div', { class: 'lbl' }, 'Свои игры') : null, list, adder)
+    ];
+  }
+
   function openProfile(uid) {
     if (!S.user) return;
     watchUser(uid);
@@ -1479,7 +1611,8 @@
         h('div', { class: 'drawer-head' }, h('h2', {}, 'Профиль'), h('button', { type: 'button', class: 'icon-btn', html: I.close, 'aria-label': 'Закрыть', onclick: () => { card.hidden = true; } })),
         h('div', { class: 'sx-card-main' }, avatar(uid, 88, true),
           h('div', {}, h('div', { class: 'sx-card-name', translate: 'no' }, p ? p.name : 'Загрузка…'), h('div', { class: 's' }, (p ? '@' + p.tag + ' · ' : '') + statusText(uid)),
-            voiceLine(uid),
+            noteOf(uid) ? h('div', { class: 'sx-note', translate: 'no' }, noteOf(uid)) : null,
+            gameLine(uid), voiceLine(uid),
             p && p.mod && p.mod.banned ? h('div', { class: 'err' }, 'Заблокирован администратором') : null)),
         h('div', { class: 'sx-acct-row' }, acts)));
     };
@@ -1678,6 +1811,19 @@
 .sx-voice .ic { display: grid; flex: none; }
 .sx-voice > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .sx-same { white-space: nowrap; }
+.sx-game { display: block; margin-top: 1px; font-size: .8rem; color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-note { margin-top: 3px; font-size: .9rem; overflow-wrap: anywhere; }
+.sx-emo { display: flex; flex-wrap: wrap; gap: 4px; }
+.sx-emo button { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: var(--raise); font-size: 1.15rem; }
+.sx-emo button:hover { border-color: var(--line-2); }
+.sx-gamerow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.sx-gamerow > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-addgame { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; border: 1px dashed var(--line-2); }
+.sx-apps { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow: auto; }
+.sx-app { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--raise); text-align: left; }
+.sx-app:hover { border-color: var(--accent); }
+.sx-app > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-app > span.s { flex: none; }
 .sx-callbtn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: transparent; color: var(--fg); transition: border-color .14s var(--ease), color .14s var(--ease), transform .1s var(--ease); }
 .sx-callbtn:hover:not(:disabled) { border-color: var(--ok); color: var(--ok); }
 .sx-callbtn:active:not(:disabled) { transform: scale(.94); }

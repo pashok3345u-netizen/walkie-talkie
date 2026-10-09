@@ -478,6 +478,9 @@ input[type="text"]:focus-visible { outline: none; border-color: var(--accent); b
 }
 button.live:hover { filter: brightness(1.1); }
 .sub { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.act { margin-top: 1px; font-size: .76rem; color: var(--muted); white-space: nowrap; }
+.act > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.act .gm { color: var(--ok); }
 .vol { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .vol input { flex: 1; min-width: 0; accent-color: var(--accent); }
 .micoff { color: var(--danger); display: none; }
@@ -1317,6 +1320,13 @@ option { background: var(--panel); color: var(--fg); }
       </div>
       <button type="button" class="switch" id="warnBtn" role="switch" aria-labelledby="warnLabel"></button>
     </div>
+    <div class="set-row" id="gameRow" hidden>
+      <div class="set-text">
+        <div class="t" id="gameLabel">Показывать, во что я играю</div>
+        <div class="s">Друзья и люди в звонке видят «Играет в …»</div>
+      </div>
+      <button type="button" class="switch" id="gameBtn" role="switch" aria-labelledby="gameLabel"></button>
+    </div>
 
     <div class="set-row stack">
       <div class="plain">
@@ -1512,7 +1522,8 @@ function load(k) { try { return localStorage.getItem(k); } catch (e) { return nu
 function loadJson(k) { try { return JSON.parse(load(k) || '{}') || {}; } catch (e) { return {}; } }
 const settings = Object.assign({
   mode: 'voice', pttCode: 'KeyV', pttVk: 0x56, muteVk: 0, ns: true, nsGate: true, duck: false, duckLevel: 0.3, screenAudio: true,
-  micId: '', outId: '', muteWarn: true, status: 'online', streamRes: 1080, streamFps: 30, music: false
+  micId: '', outId: '', muteWarn: true, status: 'online', streamRes: 1080, streamFps: 30, music: false,
+  showGame: true, games: [], note: null
 }, loadJson('racia-settings'));
 // In the Windows program (window.racia from preload.js) keys work over games and the screen picker is our own.
 const APP = window.racia && typeof window.racia.setHotkeys === 'function' ? window.racia : null;
@@ -1898,6 +1909,10 @@ function sendInfo(target) {
     testing: st.testing, cam: !!st.cam, screen: !!st.screen, viewers: st.watchers.size,
     v: 9, chat: 1, uid: MY_UID, since: st.joinedAt, status: myStatus(), acc: st.acc ? st.acc.uid : ''
   };
+  // version 20+: what I play (seconds so far — friends' clocks may be off) and my own status
+  const g = myGame(), nt = noteNow();
+  payload.game = g ? { n: g.n, s: Math.round((Date.now() - g.since) / 1000) } : null;
+  payload.note = nt ? nt.t : '';
   st.sentStatus = payload.status;
   try { quiet(st.info.send(payload, target ? { target } : undefined)); } catch (e) {}
 }
@@ -2195,6 +2210,9 @@ function wireRoom(room) {
     if (typeof data.uid === 'string' && /^[a-z0-9]{6,32}$/.test(data.uid)) m.uid = data.uid;
     if (typeof data.since === 'number' && data.since > 0) m.since = data.since;
     m.status = ['online', 'idle', 'dnd'].includes(data.status) ? data.status : 'online';
+    const gm = data.game && typeof data.game === 'object' ? data.game : null;
+    m.game = gm && cleanGame(gm.n) ? { n: cleanGame(gm.n), since: Date.now() - Math.max(0, Math.min(1e6, Number(gm.s) || 0)) * 1000 } : null;
+    m.note = typeof data.note === 'string' ? data.note.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
     // Version 17+ has the chat; the first time we meet, we swap chat histories.
     const hadChat = m.chat; m.chat = data.chat === 1;
     if (m.chat && !hadChat) chatHello(id);
@@ -2795,6 +2813,8 @@ function updateSettingsUI() {
     ? 'Без звуков входа и выхода друзей. Друзья видят красный значок'
     : st.idle ? 'Сейчас «неактивен»: тебя не было за компьютером больше 10 минут' : 'Через 10 минут без действий станет «неактивен»';
   $('#warnBtn').setAttribute('aria-checked', String(settings.muteWarn));
+  $('#gameRow').hidden = !APP;
+  $('#gameBtn').setAttribute('aria-checked', String(settings.showGame !== false));
   $('#modeVoice').setAttribute('aria-checked', String(settings.mode === 'voice'));
   $('#modePtt').setAttribute('aria-checked', String(settings.mode === 'ptt'));
   $('#modeHint').textContent = settings.mode === 'ptt'
@@ -3245,13 +3265,100 @@ function leave(reason) {
   callEvent();
 }
 
+// ---------- games and my status: "Playing CS2" ----------
+// The helper names the running programs every 20 s (names and window titles only — it never looks
+// inside a game). Known games go by their program name, your own ones are in settings.games [{exe, n}],
+// Minecraft Java runs as javaw — by its window title. Shown in the call (info.game, info.note) and,
+// with an account, to friends (social.js, live/<uid>). settings.showGame turns the game off.
+const GAMES = [
+  ['Counter-Strike 2', 'cs2'], ['Dota 2', 'dota2'], ['Minecraft', 'minecraft.windows'], ['Roblox', 'robloxplayerbeta'],
+  ['Valorant', 'valorant-win64-shipping'], ['Fortnite', 'fortniteclient-win64-shipping'], ['GTA V', 'gta5', 'gta5_enhanced'],
+  ['GTA: San Andreas', 'gta_sa'], ['Rust', 'rustclient'], ['PUBG', 'tslgame'], ['Apex Legends', 'r5apex', 'r5apex_dx12'],
+  ['League of Legends', 'league of legends'], ['World of Tanks', 'worldoftanks'], ['War Thunder', 'aces'],
+  ['Escape from Tarkov', 'escapefromtarkov'], ['Rainbow Six Siege', 'rainbowsix', 'rainbowsix_vulkan'], ['Overwatch 2', 'overwatch'],
+  ['Genshin Impact', 'genshinimpact', 'yuanshen'], ['Honkai: Star Rail', 'starrail'], ['Deadlock', 'deadlock', 'project8'],
+  ['Marvel Rivals', 'marvel-win64-shipping'], ['Helldivers 2', 'helldivers2'], ['Rocket League', 'rocketleague'],
+  ['Terraria', 'terraria'], ['Among Us', 'among us'], ['Lethal Company', 'lethal company'], ['Phasmophobia', 'phasmophobia'],
+  ['Dead by Daylight', 'deadbydaylight-win64-shipping'], ['Call of Duty', 'cod', 'blackops6', 'blackopscoldwar', 'modernwarfare'],
+  ["Garry's Mod", 'gmod'], ['Team Fortress 2', 'tf_win64'], ['Stardew Valley', 'stardew valley'], ['Elden Ring', 'eldenring'],
+  ['Cyberpunk 2077', 'cyberpunk2077'], ["Baldur's Gate 3", 'bg3', 'bg3_dx11'], ['The Witcher 3', 'witcher3'],
+  ['Palworld', 'palworld-win64-shipping'], ['Valheim', 'valheim'], ['Brawlhalla', 'brawlhalla'], ['osu!', 'osu!'],
+  ['Geometry Dash', 'geometrydash'], ['Fall Guys', 'fallguys_client_game'], ['The Finals', 'discovery'], ['Destiny 2', 'destiny2'],
+  ['Path of Exile', 'pathofexile', 'pathofexile_x64', 'pathofexilesteam'], ['World of Warcraft', 'wow'], ['Hearthstone', 'hearthstone'],
+  ['Sea of Thieves', 'sotgame'], ['DayZ', 'dayz_x64'], ['S.T.A.L.K.E.R. 2', 'stalker2-win64-shipping'], ['Euro Truck Simulator 2', 'eurotrucks2']
+];
+const GAME_EXE = new Map();
+for (const [n, ...ex] of GAMES) for (const e of ex) GAME_EXE.set(e, n);
+st.game = null; // what the helper found: {n, since}
+function cleanGame(s) { return String(s || '').replace(/\s+/g, ' ').trim().slice(0, 40); }
+function myGame() { return settings.showGame !== false && st.game ? st.game : null; }
+function noteNow() {
+  const n = settings.note;
+  return n && typeof n.t === 'string' && n.t && (!n.until || n.until > Date.now()) ? n : null;
+}
+async function checkGame() {
+  if (!APP || typeof APP.processes !== 'function') return;
+  let list;
+  try { list = await APP.processes(); } catch (e) { return; }
+  if (!Array.isArray(list)) return;
+  const own = Array.isArray(settings.games) ? settings.games : [];
+  let found = '';
+  for (const p of list) { const g = own.find((x) => x.exe === p.n); if (g) { found = g.n; break; } }
+  if (!found) {
+    for (const p of list) {
+      if (GAME_EXE.has(p.n)) { found = GAME_EXE.get(p.n); break; }
+      if ((p.n === 'javaw' || p.n === 'java') && /^minecraft/i.test(p.t || '')) { found = 'Minecraft'; break; }
+    }
+  }
+  if (found !== (st.game ? st.game.n : '')) { st.game = found ? { n: found, since: Date.now() } : null; activityChanged(); }
+}
+function activityChanged() {
+  if (st.inCall) { sendInfo(); render(); }
+  try { window.dispatchEvent(new CustomEvent('racia-activity')); } catch (e) {}
+}
+if (APP) { setTimeout(checkGame, 4000); setInterval(checkGame, 20000); }
+// A status set "for an hour" / "until tomorrow" ends by itself; the played time under names ticks on.
+setInterval(() => {
+  if (settings.note && settings.note.until && settings.note.until <= Date.now()) { settings.note = null; saveSettings(); activityChanged(); }
+  if (st.inCall) for (const [id, li] of tiles) paintActOf(id, li);
+}, 15000);
+function fmtDur(ms) {
+  const m = Math.floor(Math.max(0, ms) / 60000);
+  if (m < 1) return 'только что';
+  if (m < 60) return m + ' мин';
+  const h = Math.floor(m / 60);
+  return h + ' ч' + (m % 60 ? ' ' + (m % 60) + ' мин' : '');
+}
+// My status and "🎮 Playing CS2 · 25 min" under a name, a line each; redrawn only when it changes
+// (the English layer swaps the texts)
+function paintActivity(el, note, game) {
+  const dur = game ? fmtDur(Date.now() - game.since) : '';
+  const key = (note || '') + '\n' + (game ? game.n + '\n' + dur : '');
+  if (el.dataset.k === key) return;
+  el.dataset.k = key;
+  el.textContent = '';
+  const sp = (t, raw, cls) => { const s = document.createElement('span'); s.textContent = t; if (raw) s.setAttribute('translate', 'no'); if (cls) s.className = cls; return s; };
+  if (note) el.append(sp(note, true));
+  if (game) {
+    const g = sp('', false, 'gm');
+    g.append(sp('🎮 '), sp('Играет в'), ' ', sp(game.n, true), ' · ', sp(dur));
+    el.append(g);
+  }
+  el.hidden = !note && !game;
+}
+function paintActOf(id, li) {
+  const el = li.querySelector('.act'); if (!el) return;
+  if (id === st.myId) paintActivity(el, (noteNow() || {}).t, myGame());
+  else { const m = members.get(id); if (m) paintActivity(el, m.note, m.game); }
+}
+
 // ---------- people list ----------
 function mkTile(id, me) {
   const li = document.createElement('li');
   li.className = 'member' + (me ? ' me' : '');
   li.innerHTML =
     '<div class="avatar" aria-hidden="true"><span class="ini" translate="no"></span><img class="av" alt="" hidden><span class="dot"></span></div>' +
-    '<div class="info"><div class="nm"><span class="n" translate="no"></span>' + (me ? '<span class="tag">ты</span>' : '') + '<span class="tag own" hidden>владелец</span>' + (me ? '<span class="live" hidden>В эфире</span>' : '<button type="button" class="live" hidden></button><span class="ping"></span>') + '</div><div class="sub"></div></div>' +
+    '<div class="info"><div class="nm"><span class="n" translate="no"></span>' + (me ? '<span class="tag">ты</span>' : '') + '<span class="tag own" hidden>владелец</span>' + (me ? '<span class="live" hidden>В эфире</span>' : '<button type="button" class="live" hidden></button><span class="ping"></span>') + '</div><div class="sub"></div><div class="act" hidden></div></div>' +
     '<div class="mact"><span class="micoff" title="Микрофон выключен">' + MICOFF + '</span>' + (me ? '' : '<button type="button" class="mbtn" hidden aria-label="Управление">' + DOTS + '</button>') + '</div>' +
     (me ? '' : '<label class="vol"><span class="sr">Громкость голоса</span>' + VOLICON + '<input type="range" min="0" max="100" step="1"></label>');
   if (!me) {
@@ -3337,6 +3444,7 @@ function render() {
     li.classList.toggle('muted', !!mutedIcon);
     if (stt !== 'online') sub += ' · ' + STATUS_TEXT[stt];
     li.querySelector('.sub').textContent = sub + extras(m);
+    paintActOf(m.id, li);
     if (list.children[i] !== li) list.insertBefore(li, list.children[i] || null);
   });
   for (const [id, li] of tiles) if (!seen.has(id)) { li.remove(); tiles.delete(id); }
@@ -4313,6 +4421,7 @@ $('#streamRate').addEventListener('change', (e) => {
 $('#micSel').addEventListener('change', (e) => switchMic(e.target.value));
 $('#outSel').addEventListener('change', (e) => switchOut(e.target.value));
 $('#warnBtn').addEventListener('click', () => { settings.muteWarn = !settings.muteWarn; saveSettings(); updateSettingsUI(); });
+$('#gameBtn').addEventListener('click', () => { settings.showGame = settings.showGame === false; saveSettings(); updateSettingsUI(); activityChanged(); });
 $('#stOnline').addEventListener('click', () => setMyStatus('online'));
 $('#stDnd').addEventListener('click', () => setMyStatus('dnd'));
 
@@ -4508,6 +4617,21 @@ window.RaciaCall = {
     applyRules();
   },
   setStatus: (s) => setMyStatus(s),
+  // "Playing …" and my own status (version 20+)
+  activity: () => ({ game: myGame(), found: st.game, note: noteNow(), showGame: settings.showGame !== false,
+    games: (Array.isArray(settings.games) ? settings.games : []).map((g) => ({ exe: g.exe, n: g.n })) }),
+  setNote(t, until) {
+    t = String(t || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    settings.note = t ? { t, until: Number(until) > 0 ? Number(until) : 0 } : null;
+    saveSettings(); activityChanged();
+  },
+  setShowGame(on) { settings.showGame = !!on; saveSettings(); updateSettingsUI(); activityChanged(); },
+  setGames(list) {
+    settings.games = (Array.isArray(list) ? list : []).map((g) => ({ exe: String(g.exe || '').toLowerCase().replace(/\.exe$/, '').trim().slice(0, 64), n: cleanGame(g.n) }))
+      .filter((g) => g.exe && g.n).slice(0, 30);
+    saveSettings(); checkGame();
+  },
+  windows: () => (APP && typeof APP.windows === 'function' ? APP.windows() : Promise.resolve(null)),
   prefs: () => ({ theme: settings.theme, lang: settings.lang }),
   setPref: (k, v) => setPref(k, v),
   setChatBadge(n, show) {
